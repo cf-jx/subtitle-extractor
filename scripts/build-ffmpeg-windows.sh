@@ -17,7 +17,7 @@ if [[ "${MSYSTEM:-}" != "UCRT64" ]]; then
   exit 2
 fi
 
-for tool in ar curl file gcc make nm objdump ranlib sha256sum strip tar; do
+for tool in ar curl file gcc make nasm nm objdump ranlib sha256sum strip tar; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "Missing required MSYS2 build tool: ${tool}" >&2
     exit 2
@@ -73,7 +73,7 @@ cd "$BUILD_ROOT/ffmpeg-${FFMPEG_VERSION}"
   --extra-cflags="-O2 -pipe" \
   --extra-ldflags="-static -static-libgcc"
 
-make -j"${NUMBER_OF_PROCESSORS:-2}" ffmpeg ffprobe
+make -j"${NUMBER_OF_PROCESSORS:-2}" ffmpeg.exe ffprobe.exe
 strip ffmpeg.exe ffprobe.exe
 
 BINARY_DIRECTORY="$PROJECT_ROOT/src-tauri/binaries"
