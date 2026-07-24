@@ -135,7 +135,7 @@ jobs:
 
       - name: Build unsigned Windows installers
         shell: pwsh
-        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles 'nsis,msi'
 
       - name: Verify Windows installers
         shell: pwsh
