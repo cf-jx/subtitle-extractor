@@ -173,6 +173,21 @@ function Wait-PathRemoval {
   }
 }
 
+function Clear-SharedProductState {
+  $ProductRegistryPath = "HKCU:\Software\SCF\文案提取"
+  if (Test-Path -LiteralPath $ProductRegistryPath) {
+    Remove-Item -LiteralPath $ProductRegistryPath -Recurse -Force
+  }
+  foreach ($AppDataPath in @(
+    (Join-Path $env:APPDATA "com.scf.subtitleextractor"),
+    (Join-Path $env:LOCALAPPDATA "com.scf.subtitleextractor")
+  )) {
+    if (Test-Path -LiteralPath $AppDataPath) {
+      Remove-Item -LiteralPath $AppDataPath -Recurse -Force
+    }
+  }
+}
+
 function Get-ProductUninstallEntries {
   $RegistryRoots = @(
     "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -332,6 +347,7 @@ try {
   }
   New-Item -ItemType Directory -Path $SmokeRoot | Out-Null
   Assert-UninstallRegistration -Expected $false
+  Clear-SharedProductState
 
   $NsisInstaller = $NsisInstallers[0]
   Invoke-CheckedProcess `
@@ -351,6 +367,7 @@ try {
   Invoke-CheckedProcess -FilePath $NsisUninstaller -Arguments @("/S")
   Wait-PathRemoval -Path $NsisInstallDirectory
   Assert-UninstallRegistration -Expected $false
+  Clear-SharedProductState
 
   $MsiInstaller = $MsiInstallers[0]
   $MsiInstallAttempted = $true
@@ -387,6 +404,7 @@ try {
   $MsiInstallAttempted = $false
   Wait-PathRemoval -Path $MsiInstallDirectory
   Assert-UninstallRegistration -Expected $false
+  Clear-SharedProductState
 }
 finally {
   $NsisUninstaller = Join-Path $NsisInstallDirectory "uninstall.exe"
@@ -412,18 +430,7 @@ finally {
   if (Test-Path -LiteralPath $SmokeRoot) {
     Remove-Item -LiteralPath $SmokeRoot -Recurse -Force
   }
-  $ProductRegistryPath = "HKCU:\Software\SCF\文案提取"
-  if (Test-Path -LiteralPath $ProductRegistryPath) {
-    Remove-Item -LiteralPath $ProductRegistryPath -Recurse -Force
-  }
-  foreach ($AppDataPath in @(
-    (Join-Path $env:APPDATA "com.scf.subtitleextractor"),
-    (Join-Path $env:LOCALAPPDATA "com.scf.subtitleextractor")
-  )) {
-    if (Test-Path -LiteralPath $AppDataPath) {
-      Remove-Item -LiteralPath $AppDataPath -Recurse -Force
-    }
-  }
+  Clear-SharedProductState
 }
 
 Write-Host "Verified AMD64 application, NSIS installer, and x64 MSI"
