@@ -1,0 +1,73 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "文案提取",
+  "version": "0.1.0",
+  "identifier": "com.scf.subtitleextractor",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm dev --port 1420",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "文案提取",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost",
+      "devCsp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "SCF",
+    "category": "Utility",
+    "shortDescription": "在本机提取视频文案和字幕",
+    "longDescription": "导入本地音视频或粘贴公开的抖音、TikTok 视频链接，在设备本地生成 TXT、SRT 和 VTT 字幕。",
+    "copyright": "Copyright © 2026 SCF",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "externalBin": [
+      "binaries/ffmpeg",
+      "binaries/ffprobe",
+      "binaries/yt-dlp"
+    ],
+    "resources": {
+      "resources/models/ggml-small-q5_1.bin": "models/ggml-small-q5_1.bin",
+      "resources/checksums.json": "checksums.json",
+      "resources/THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "resources/licenses/FFmpeg-LGPL-2.1.txt": "licenses/FFmpeg-LGPL-2.1.txt"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true
+    },
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    },
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

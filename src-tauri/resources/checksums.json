@@ -1,0 +1,17 @@
+{
+  "model": {
+    "file": "ggml-small-q5_1.bin",
+    "sourceRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "sha256": "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
+    "bytes": 190085487
+  },
+  "ytDlp": {
+    "version": "2026.07.04",
+    "macosSha256": "498bd0dae17855c599d371d68ec5bafc439a9d8640e838be25c765a9792f261b",
+    "windowsSha256": "52fe3c26dcf71fbdc85b528589020bb0b8e383155cfa81b64dd447bbe35e24b8"
+  },
+  "ffmpeg": {
+    "version": "8.1.2",
+    "sourceSha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+  }
+}

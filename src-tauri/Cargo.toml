@@ -1,0 +1,47 @@
+[package]
+name = "subtitle-extractor"
+version = "0.1.0"
+description = "Local video transcript and subtitle extractor"
+authors = ["SCF"]
+license = "MIT"
+repository = ""
+edition = "2021"
+rust-version = "1.88"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "subtitle_extractor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+command-group = { version = "5.0.1", features = ["with-tokio"] }
+fs2 = "0.4.3"
+hound = "3.5"
+log = "0.4"
+parking_lot = "0.12"
+regex = "1.12"
+reqwest = { version = "0.13.4", default-features = false, features = ["charset", "http2", "rustls", "system-proxy"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-dialog = "2.7.2"
+tauri-plugin-log = "2"
+tauri-plugin-shell = "2.3.5"
+tempfile = "3.27"
+thiserror = "2.0"
+tokio = { version = "1.53", features = ["io-util", "macros", "process", "sync", "time"] }
+url = "2.5"
+uuid = { version = "1.24", features = ["v4", "serde"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+whisper-rs = { version = "0.16.0", features = ["metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+whisper-rs = "0.16.0"

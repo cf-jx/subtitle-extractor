@@ -1,0 +1,139 @@
+name: Build desktop installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: aarch64-apple-darwin
+          components: clippy,rustfmt
+
+      - name: Install CMake
+        run: brew install cmake
+
+      - name: Prepare pinned runtime
+        run: |
+          pnpm runtime:fetch --target aarch64-apple-darwin
+          pnpm runtime:ffmpeg aarch64-apple-darwin
+
+      - name: Verify
+        run: |
+          pnpm lint
+          pnpm test
+          cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
+          cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+
+      - name: Build repaired Mac app and DMG
+        run: pnpm package:macos aarch64-apple-darwin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64-installers
+          path: |
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        shell: pwsh
+        run: corepack enable
+
+      - name: Install dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: clippy,rustfmt
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            curl
+            diffutils
+            file
+            make
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-gcc
+            perl
+            tar
+            xz
+
+      - name: Prepare pinned yt-dlp and model
+        shell: pwsh
+        run: pnpm runtime:fetch --target x86_64-pc-windows-msvc
+
+      - name: Build pinned FFmpeg
+        shell: msys2 {0}
+        run: bash scripts/build-ffmpeg-windows.sh x86_64-pc-windows-msvc
+
+      - name: Verify pinned Windows runtime
+        shell: pwsh
+        run: pnpm runtime:verify:windows
+
+      - name: Verify application
+        shell: pwsh
+        run: |
+          pnpm lint
+          pnpm test
+          pnpm build
+          cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
+          cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+
+      - name: Build unsigned Windows installers
+        shell: pwsh
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi
+
+      - name: Verify Windows installers
+        shell: pwsh
+        run: pnpm runtime:verify:windows:installers
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-installers
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
+          if-no-files-found: error
