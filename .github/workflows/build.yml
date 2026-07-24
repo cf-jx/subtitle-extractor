@@ -95,6 +95,7 @@ jobs:
             make
             mingw-w64-ucrt-x86_64-binutils
             mingw-w64-ucrt-x86_64-gcc
+            nasm
             perl
             tar
             xz
