@@ -62,7 +62,6 @@ cd "$BUILD_ROOT/ffmpeg-${FFMPEG_VERSION}"
   --disable-ffplay \
   --disable-network \
   --disable-avdevice \
-  --disable-postproc \
   --disable-encoders \
   --enable-encoder=pcm_s16le \
   --disable-muxers \

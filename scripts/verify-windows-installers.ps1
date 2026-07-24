@@ -173,6 +173,71 @@ function Wait-PathRemoval {
   }
 }
 
+function Get-ProductUninstallEntries {
+  $RegistryRoots = @(
+    "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+    "Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+    "Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+  )
+  $Entries = @()
+  foreach ($RegistryRoot in $RegistryRoots) {
+    if (-not (Test-Path -LiteralPath $RegistryRoot)) {
+      continue
+    }
+    foreach ($RegistryKey in (Get-ChildItem -LiteralPath $RegistryRoot)) {
+      $Entry = Get-ItemProperty `
+        -LiteralPath $RegistryKey.PSPath `
+        -ErrorAction SilentlyContinue
+      if ($null -eq $Entry) {
+        continue
+      }
+      $DisplayName = $Entry.PSObject.Properties["DisplayName"]
+      $Publisher = $Entry.PSObject.Properties["Publisher"]
+      if (
+        $null -ne $DisplayName -and
+        $null -ne $Publisher -and
+        $DisplayName.Value -eq "文案提取" -and
+        $Publisher.Value -eq "SCF"
+      ) {
+        $Entries += $Entry
+      }
+    }
+  }
+  return @($Entries)
+}
+
+function Assert-UninstallRegistration {
+  param(
+    [Parameter(Mandatory = $true)][bool]$Expected,
+    [string]$InstallDirectory = ""
+  )
+
+  $Entries = @(Get-ProductUninstallEntries)
+  if (-not $Expected) {
+    if ($Entries.Count -ne 0) {
+      throw "Uninstall registration still exists after package removal"
+    }
+    return
+  }
+
+  if ($Entries.Count -ne 1) {
+    throw "Expected one uninstall registration, found $($Entries.Count)"
+  }
+  $DirectorySeparators = [char[]]@('\', '/')
+  $RegisteredLocation = (
+    [string]$Entries[0].InstallLocation
+  ).Trim('"').TrimEnd($DirectorySeparators)
+  $ExpectedLocation = $InstallDirectory.TrimEnd($DirectorySeparators)
+  if (
+    -not [StringComparer]::OrdinalIgnoreCase.Equals(
+      $RegisteredLocation,
+      $ExpectedLocation
+    )
+  ) {
+    throw "Unexpected registered install location: $RegisteredLocation"
+  }
+}
+
 if (-not (Test-Path -LiteralPath $AppExecutable -PathType Leaf)) {
   throw "Missing release application executable: $AppExecutable"
 }
@@ -266,12 +331,16 @@ try {
     Remove-Item -LiteralPath $SmokeRoot -Recurse -Force
   }
   New-Item -ItemType Directory -Path $SmokeRoot | Out-Null
+  Assert-UninstallRegistration -Expected $false
 
   $NsisInstaller = $NsisInstallers[0]
   Invoke-CheckedProcess `
     -FilePath $NsisInstaller.FullName `
-    -Arguments @("/S", "/D=$NsisInstallDirectory")
+    -Arguments @("/S", "/NS", "/D=$NsisInstallDirectory")
   Assert-RuntimeLayout -InstallDirectory $NsisInstallDirectory
+  Assert-UninstallRegistration `
+    -Expected $true `
+    -InstallDirectory $NsisInstallDirectory
   Assert-ApplicationLaunch `
     -ApplicationPath (Join-Path $NsisInstallDirectory "subtitle-extractor.exe")
 
@@ -281,6 +350,7 @@ try {
   }
   Invoke-CheckedProcess -FilePath $NsisUninstaller -Arguments @("/S")
   Wait-PathRemoval -Path $NsisInstallDirectory
+  Assert-UninstallRegistration -Expected $false
 
   $MsiInstaller = $MsiInstallers[0]
   $MsiInstallAttempted = $true
@@ -297,6 +367,9 @@ try {
     ) `
     -AllowedExitCodes @(0, 3010)
   Assert-RuntimeLayout -InstallDirectory $MsiInstallDirectory
+  Assert-UninstallRegistration `
+    -Expected $true `
+    -InstallDirectory $MsiInstallDirectory
   Assert-ApplicationLaunch `
     -ApplicationPath (Join-Path $MsiInstallDirectory "subtitle-extractor.exe")
 
@@ -313,6 +386,7 @@ try {
     -AllowedExitCodes @(0, 3010)
   $MsiInstallAttempted = $false
   Wait-PathRemoval -Path $MsiInstallDirectory
+  Assert-UninstallRegistration -Expected $false
 }
 finally {
   $NsisUninstaller = Join-Path $NsisInstallDirectory "uninstall.exe"
@@ -338,8 +412,20 @@ finally {
   if (Test-Path -LiteralPath $SmokeRoot) {
     Remove-Item -LiteralPath $SmokeRoot -Recurse -Force
   }
+  $ProductRegistryPath = "HKCU:\Software\SCF\文案提取"
+  if (Test-Path -LiteralPath $ProductRegistryPath) {
+    Remove-Item -LiteralPath $ProductRegistryPath -Recurse -Force
+  }
+  foreach ($AppDataPath in @(
+    (Join-Path $env:APPDATA "com.scf.subtitleextractor"),
+    (Join-Path $env:LOCALAPPDATA "com.scf.subtitleextractor")
+  )) {
+    if (Test-Path -LiteralPath $AppDataPath) {
+      Remove-Item -LiteralPath $AppDataPath -Recurse -Force
+    }
+  }
 }
 
 Write-Host "Verified AMD64 application, NSIS installer, and x64 MSI"
-Write-Host "Installed, launched, and uninstalled NSIS and MSI packages"
+Write-Host "Installed, launched, and removed NSIS and MSI package payloads"
 Write-Host "Wrote installer hashes to $HashManifest"
