@@ -82,7 +82,8 @@ These two images are the visual source of truth for the desktop UI.
 - Active jobs can be cancelled.
 - Progress is stage-aware and never fabricated when total work is unknown.
 - Completed transcript segments are editable before export.
-- Copy exports plain text. Export writes TXT, SRT, and VTT.
+- Copy exports plain text. The selected export format writes TXT, SRT, or VTT.
+- Completed tasks expose an action that opens the export directory.
 - Keyboard focus is always visible.
 - The layout remains usable at 1024×680 and scales cleanly above 1440×900.
 

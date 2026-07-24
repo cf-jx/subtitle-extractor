@@ -65,6 +65,7 @@ function createBackend(
     startJob: vi.fn(async () => undefined),
     cancelJob: vi.fn(async () => undefined),
     exportTranscript: vi.fn(async () => undefined),
+    openOutputDirectory: vi.fn(async () => undefined),
     pickMedia: vi.fn(async () => '/Users/tester/Videos/示例视频.mp4'),
     pickOutputDirectory: vi.fn(async () => '/Users/tester/Documents/文案输出'),
     subscribeJobUpdates: vi.fn(async (listener) => {
@@ -138,12 +139,14 @@ describe('App', () => {
     expect(screen.getByText('示例视频.mp4')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: '选择' }))
+    await user.click(screen.getByRole('button', { name: /SRT.*通用字幕/ }))
     await user.click(screen.getByRole('button', { name: /开始提取/ }))
 
     expect(backend.startJob).toHaveBeenCalledWith({
       sourceKind: 'local',
       source: '/Users/tester/Videos/示例视频.mp4',
       outputDir: '/Users/tester/Documents/文案输出',
+      exportFormat: 'srt',
     })
   })
 
@@ -198,15 +201,20 @@ describe('App', () => {
     )
 
     await user.click(screen.getByRole('button', { name: '选择' }))
-    await user.click(screen.getByRole('button', { name: /导出字幕/ }))
+    await user.click(screen.getByRole('button', { name: /VTT.*网页字幕/ }))
+    await user.click(screen.getByRole('button', { name: /导出 VTT/ }))
 
     expect(backend.exportTranscript).toHaveBeenCalledWith({
       jobId: 'job-1',
+      exportFormat: 'vtt',
       segments: [
         processingJob.segments[0],
         { ...processingJob.segments[1], text: '修改后的第二段文案。' },
       ],
     })
+
+    await user.click(screen.getByRole('button', { name: '打开文件位置' }))
+    expect(backend.openOutputDirectory).toHaveBeenCalledWith('job-1')
   })
 
   it('deduplicates repeated job events and cancels an active job', async () => {

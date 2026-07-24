@@ -1,4 +1,5 @@
 export type SourceKind = 'local' | 'url'
+export type ExportFormat = 'txt' | 'srt' | 'vtt'
 
 export type JobStage =
   | 'queued'
@@ -21,9 +22,9 @@ export interface SubtitleSegment {
 }
 
 export interface JobOutputs {
-  txt: string
-  srt: string
-  vtt: string
+  txt: string | null
+  srt: string | null
+  vtt: string | null
 }
 
 export interface JobSnapshot {
@@ -52,11 +53,13 @@ export interface StartJobRequest {
   sourceKind: SourceKind
   source: string
   outputDir: string
+  exportFormat: ExportFormat
 }
 
 export interface ExportTranscriptRequest {
   jobId: string
   segments: SubtitleSegment[]
+  exportFormat: ExportFormat
 }
 
 export interface BackendAvailability {
@@ -78,6 +81,7 @@ export interface DesktopBackend {
   startJob(request: StartJobRequest): Promise<void>
   cancelJob(jobId: string): Promise<void>
   exportTranscript(request: ExportTranscriptRequest): Promise<void>
+  openOutputDirectory(jobId: string): Promise<void>
   pickMedia(): Promise<string | null>
   pickOutputDirectory(): Promise<string | null>
   subscribeJobUpdates(

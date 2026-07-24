@@ -6,7 +6,7 @@ import {
   LoaderCircle,
   Upload,
 } from 'lucide-react'
-import type { SourceKind } from '../backend/types'
+import type { ExportFormat, SourceKind } from '../backend/types'
 import { filenameFromPath } from '../lib/transcript'
 
 interface SourcePanelProps {
@@ -14,6 +14,7 @@ interface SourcePanelProps {
   localPath: string
   url: string
   outputDir: string
+  exportFormat: ExportFormat
   urlError: string | null
   isStarting: boolean
   isDragging: boolean
@@ -23,6 +24,7 @@ interface SourcePanelProps {
   onUrlChange: (value: string) => void
   onPickMedia: () => void
   onPickOutput: () => void
+  onExportFormatChange: (format: ExportFormat) => void
   onStart: () => void
   onDomDragEnter: () => void
   onDomDragLeave: () => void
@@ -33,6 +35,7 @@ export function SourcePanel({
   localPath,
   url,
   outputDir,
+  exportFormat,
   urlError,
   isStarting,
   isDragging,
@@ -42,6 +45,7 @@ export function SourcePanel({
   onUrlChange,
   onPickMedia,
   onPickOutput,
+  onExportFormatChange,
   onStart,
   onDomDragEnter,
   onDomDragLeave,
@@ -161,6 +165,30 @@ export function SourcePanel({
             </button>
           </div>
         </div>
+
+        <fieldset className="format-field">
+          <legend>导出格式</legend>
+          <div className="format-options">
+            {(['txt', 'srt', 'vtt'] as const).map((format) => (
+              <button
+                type="button"
+                className="format-option"
+                aria-pressed={exportFormat === format}
+                key={format}
+                onClick={() => onExportFormatChange(format)}
+              >
+                <strong>{format.toUpperCase()}</strong>
+                <span>
+                  {format === 'txt'
+                    ? '纯文案'
+                    : format === 'srt'
+                      ? '通用字幕'
+                      : '网页字幕'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         <button
           type="button"

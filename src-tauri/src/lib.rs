@@ -36,6 +36,7 @@ pub fn run() {
             jobs::start_job,
             jobs::cancel_job,
             jobs::export_transcript,
+            jobs::open_output_directory,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

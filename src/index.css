@@ -1,20 +1,20 @@
 :root {
-  --background: #f6f7f9;
-  --surface: #ffffff;
-  --navigation: #162333;
-  --navigation-hover: #203248;
-  --primary: #1769e8;
-  --primary-hover: #0f5dcc;
-  --success: #15a45d;
-  --success-text: #08783f;
-  --danger: #db3b3b;
-  --danger-text: #bd2727;
-  --text: #171a1f;
-  --muted: #6c7480;
-  --border: #d9dde4;
-  --focus: #1769e8;
-  --control-radius: 6px;
-  --panel-radius: 8px;
+  --background: #f8f1e7;
+  --surface: #fffaf3;
+  --navigation: #49372e;
+  --navigation-hover: #61483b;
+  --primary: #d97868;
+  --primary-hover: #c86658;
+  --success: #7da476;
+  --success-text: #557a50;
+  --danger: #cf675f;
+  --danger-text: #a84742;
+  --text: #3f3029;
+  --muted: #89786e;
+  --border: #dfcdbd;
+  --focus: #b65f53;
+  --control-radius: 14px;
+  --panel-radius: 22px;
   --font-ui:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI',
     'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;

@@ -9,7 +9,7 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 
-use crate::domain::{OutputFiles, TranscriptSegment};
+use crate::domain::{ExportFormat, OutputFiles, TranscriptSegment};
 
 const RESERVATION_PREFIX: &str = ".subtitle-extractor-reservation-";
 
@@ -18,14 +18,15 @@ pub struct OutputReservation {
     _file: File,
 }
 
-pub fn reserve_exports(
+pub fn reserve_export(
     lock_root: &Path,
     output_dir: &Path,
     output_stem: &str,
+    export_format: ExportFormat,
 ) -> Result<OutputReservation, String> {
-    ensure_exports_available(output_dir, output_stem)?;
+    ensure_export_available(output_dir, output_stem, export_format)?;
 
-    let path = reservation_path(lock_root, output_dir, output_stem)?;
+    let path = reservation_path(lock_root, output_dir, output_stem, export_format)?;
     let file = OpenOptions::new()
         .create(true)
         .read(true)
@@ -41,7 +42,7 @@ pub fn reserve_exports(
         }
     })?;
 
-    ensure_exports_available(output_dir, output_stem)?;
+    ensure_export_available(output_dir, output_stem, export_format)?;
 
     Ok(OutputReservation { _file: file })
 }
@@ -50,6 +51,7 @@ fn reservation_path(
     lock_root: &Path,
     output_dir: &Path,
     output_stem: &str,
+    export_format: ExportFormat,
 ) -> Result<PathBuf, String> {
     fs::create_dir_all(lock_root).map_err(|error| format!("无法创建字幕输出锁目录：{error}"))?;
     let canonical_output =
@@ -62,6 +64,8 @@ fn reservation_path(
     hasher.update(output_key.as_bytes());
     hasher.update([0]);
     hasher.update(output_stem.as_bytes());
+    hasher.update([0]);
+    hasher.update(export_format.extension().as_bytes());
     let digest = hasher.finalize();
     Ok(lock_root.join(format!("{RESERVATION_PREFIX}{digest:x}.lock")))
 }
@@ -195,66 +199,45 @@ pub fn render_vtt(segments: &[TranscriptSegment]) -> String {
     output
 }
 
-pub fn write_exports(
+pub fn write_export(
     output_dir: &Path,
     output_stem: &str,
     segments: Vec<TranscriptSegment>,
+    export_format: ExportFormat,
 ) -> Result<OutputFiles, String> {
     let segments = normalize_segments(segments)?;
-    let destinations = [
-        ("txt", render_txt(&segments)),
-        ("srt", render_srt(&segments)),
-        ("vtt", render_vtt(&segments)),
-    ];
+    let content = match export_format {
+        ExportFormat::Txt => render_txt(&segments),
+        ExportFormat::Srt => render_srt(&segments),
+        ExportFormat::Vtt => render_vtt(&segments),
+    };
+    let destination = export_path(output_dir, output_stem, export_format);
+    ensure_export_available(output_dir, output_stem, export_format)?;
 
-    let final_paths = export_paths(output_dir, output_stem);
-    ensure_exports_available(output_dir, output_stem)?;
+    let mut file = NamedTempFile::new_in(output_dir)
+        .map_err(|error| format!("创建字幕临时文件失败：{error}"))?;
+    file.write_all(content.as_bytes())
+        .and_then(|_| file.as_file().sync_all())
+        .map_err(|error| format!("写入字幕文件失败：{error}"))?;
+    file.persist_noclobber(&destination)
+        .map_err(|error| format!("保存字幕文件失败，且未覆盖已有文件：{}", error.error))?;
 
-    let mut temporary_files = Vec::with_capacity(destinations.len());
-    for (_, content) in &destinations {
-        let mut file = NamedTempFile::new_in(output_dir)
-            .map_err(|error| format!("创建字幕临时文件失败：{error}"))?;
-        file.write_all(content.as_bytes())
-            .and_then(|_| file.as_file().sync_all())
-            .map_err(|error| format!("写入字幕文件失败：{error}"))?;
-        temporary_files.push(file);
-    }
-
-    let mut published = Vec::new();
-    for (file, destination) in temporary_files.into_iter().zip(&final_paths) {
-        if let Err(error) = file.persist_noclobber(destination) {
-            let published_detail = if published.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "；已完整保存：{}",
-                    published
-                        .iter()
-                        .filter_map(|path: &PathBuf| path.file_name()?.to_str())
-                        .collect::<Vec<_>>()
-                        .join("、")
-                )
-            };
-            return Err(format!(
-                "保存字幕文件失败，且未覆盖已有文件：{}{published_detail}",
-                error.error
-            ));
-        }
-        published.push(destination.clone());
-    }
+    let exported_path = path_to_string(&destination)?;
 
     Ok(OutputFiles {
-        txt: path_to_string(&final_paths[0])?,
-        srt: path_to_string(&final_paths[1])?,
-        vtt: path_to_string(&final_paths[2])?,
+        txt: (export_format == ExportFormat::Txt).then(|| exported_path.clone()),
+        srt: (export_format == ExportFormat::Srt).then(|| exported_path.clone()),
+        vtt: (export_format == ExportFormat::Vtt).then_some(exported_path),
     })
 }
 
-pub fn ensure_exports_available(output_dir: &Path, output_stem: &str) -> Result<(), String> {
-    if let Some(existing) = export_paths(output_dir, output_stem)
-        .iter()
-        .find(|path| path.exists())
-    {
+pub fn ensure_export_available(
+    output_dir: &Path,
+    output_stem: &str,
+    export_format: ExportFormat,
+) -> Result<(), String> {
+    let existing = export_path(output_dir, output_stem, export_format);
+    if existing.exists() {
         return Err(format!(
             "输出文件已存在：{}。请更换输出文件夹或移走同名文件",
             existing
@@ -267,16 +250,16 @@ pub fn ensure_exports_available(output_dir: &Path, output_stem: &str) -> Result<
 }
 
 pub fn remove_exports(outputs: &OutputFiles) {
-    for path in [&outputs.txt, &outputs.srt, &outputs.vtt] {
+    for path in [&outputs.txt, &outputs.srt, &outputs.vtt]
+        .into_iter()
+        .flatten()
+    {
         let _ = fs::remove_file(path);
     }
 }
 
-fn export_paths(output_dir: &Path, output_stem: &str) -> Vec<PathBuf> {
-    ["txt", "srt", "vtt"]
-        .iter()
-        .map(|extension| output_dir.join(format!("{output_stem}.{extension}")))
-        .collect()
+fn export_path(output_dir: &Path, output_stem: &str, export_format: ExportFormat) -> PathBuf {
+    output_dir.join(format!("{output_stem}.{}", export_format.extension()))
 }
 
 fn path_to_string(path: &Path) -> Result<String, String> {
@@ -349,43 +332,42 @@ mod tests {
     #[test]
     fn writes_utf8_exports_without_overwriting_existing_files() {
         let output = tempdir().unwrap();
-        let files = write_exports(output.path(), "访谈", example_segments()).unwrap();
+        let files =
+            write_export(output.path(), "访谈", example_segments(), ExportFormat::Srt).unwrap();
 
-        assert_eq!(
-            fs::read_to_string(&files.txt).unwrap(),
-            "第一句。\nSecond line.\n"
-        );
-        assert!(fs::read_to_string(&files.srt)
+        assert!(fs::read_to_string(files.srt.as_ref().unwrap())
             .unwrap()
             .contains("00:00:01,500 --> 00:00:03,050"));
-        assert!(fs::read_to_string(&files.vtt)
-            .unwrap()
-            .starts_with("WEBVTT\n\n"));
+        assert!(files.txt.is_none());
+        assert!(files.vtt.is_none());
 
-        let error = write_exports(output.path(), "访谈", example_segments()).unwrap_err();
+        let error =
+            write_export(output.path(), "访谈", example_segments(), ExportFormat::Srt).unwrap_err();
         assert!(error.contains("输出文件已存在"));
 
         remove_exports(&files);
-        assert!(!Path::new(&files.txt).exists());
-        assert!(!Path::new(&files.srt).exists());
-        assert!(!Path::new(&files.vtt).exists());
+        assert!(!Path::new(files.srt.as_ref().unwrap()).exists());
     }
 
     #[test]
     fn reserves_output_names_across_jobs_and_releases_on_drop() {
         let output = tempdir().unwrap();
         let locks = tempdir().unwrap();
-        let first = reserve_exports(locks.path(), output.path(), "同名视频").unwrap();
+        let first =
+            reserve_export(locks.path(), output.path(), "同名视频", ExportFormat::Txt).unwrap();
 
-        let conflict = reserve_exports(locks.path(), output.path(), "同名视频").unwrap_err();
+        let conflict =
+            reserve_export(locks.path(), output.path(), "同名视频", ExportFormat::Txt).unwrap_err();
         assert!(conflict.contains("正在处理"));
 
         drop(first);
-        let second = reserve_exports(locks.path(), output.path(), "同名视频").unwrap();
+        let second =
+            reserve_export(locks.path(), output.path(), "同名视频", ExportFormat::Txt).unwrap();
         drop(second);
 
         fs::write(output.path().join("同名视频.txt"), "existing").unwrap();
-        let existing = reserve_exports(locks.path(), output.path(), "同名视频").unwrap_err();
+        let existing =
+            reserve_export(locks.path(), output.path(), "同名视频", ExportFormat::Txt).unwrap_err();
         assert!(existing.contains("输出文件已存在"));
     }
 
@@ -393,14 +375,16 @@ mod tests {
     fn reuses_persistent_lock_files_after_previous_owner_exits() {
         let output = tempdir().unwrap();
         let locks = tempdir().unwrap();
-        let path = reservation_path(locks.path(), output.path(), "访谈").unwrap();
+        let path =
+            reservation_path(locks.path(), output.path(), "访谈", ExportFormat::Txt).unwrap();
         fs::write(&path, "stale metadata").unwrap();
 
-        let reservation = reserve_exports(locks.path(), output.path(), "访谈").unwrap();
+        let reservation =
+            reserve_export(locks.path(), output.path(), "访谈", ExportFormat::Txt).unwrap();
         assert!(path.is_file());
         drop(reservation);
 
-        assert!(reserve_exports(locks.path(), output.path(), "访谈").is_ok());
+        assert!(reserve_export(locks.path(), output.path(), "访谈", ExportFormat::Txt).is_ok());
     }
 
     #[test]
@@ -409,9 +393,32 @@ mod tests {
         let second_output = tempdir().unwrap();
         let locks = tempdir().unwrap();
 
-        let first = reserve_exports(locks.path(), first_output.path(), "video").unwrap();
-        let second = reserve_exports(locks.path(), second_output.path(), "video").unwrap();
+        let first = reserve_export(
+            locks.path(),
+            first_output.path(),
+            "video",
+            ExportFormat::Txt,
+        )
+        .unwrap();
+        let second = reserve_export(
+            locks.path(),
+            second_output.path(),
+            "video",
+            ExportFormat::Txt,
+        )
+        .unwrap();
 
         drop((first, second));
+    }
+
+    #[test]
+    fn same_stem_with_different_formats_does_not_conflict() {
+        let output = tempdir().unwrap();
+        let locks = tempdir().unwrap();
+
+        let txt = reserve_export(locks.path(), output.path(), "video", ExportFormat::Txt).unwrap();
+        let srt = reserve_export(locks.path(), output.path(), "video", ExportFormat::Srt).unwrap();
+
+        drop((txt, srt));
     }
 }

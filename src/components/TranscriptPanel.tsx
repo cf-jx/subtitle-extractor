@@ -1,11 +1,15 @@
 import {
-  ChevronDown,
   Clipboard,
   Download,
   FileText,
+  FolderOpen,
   LoaderCircle,
 } from 'lucide-react'
-import type { JobSnapshot, SubtitleSegment } from '../backend/types'
+import type {
+  ExportFormat,
+  JobSnapshot,
+  SubtitleSegment,
+} from '../backend/types'
 import { formatTimestamp } from '../lib/transcript'
 
 interface TranscriptPanelProps {
@@ -14,9 +18,12 @@ interface TranscriptPanelProps {
   runtimeAvailable: boolean
   isCopying: boolean
   isExporting: boolean
+  isOpeningOutput: boolean
+  exportFormat: ExportFormat
   onSegmentChange: (index: number, text: string) => void
   onCopy: () => void
   onExport: () => void
+  onOpenOutput: () => void
 }
 
 export function TranscriptPanel({
@@ -25,9 +32,12 @@ export function TranscriptPanel({
   runtimeAvailable,
   isCopying,
   isExporting,
+  isOpeningOutput,
+  exportFormat,
   onSegmentChange,
   onCopy,
   onExport,
+  onOpenOutput,
 }: TranscriptPanelProps) {
   const hasTranscript = segments.length > 0
   const canExport = runtimeAvailable && hasTranscript
@@ -43,6 +53,19 @@ export function TranscriptPanel({
           {job ? <span className="selected-task-name">{job.displayName}</span> : null}
         </div>
         <div className="panel-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!job || !runtimeAvailable || isOpeningOutput}
+            onClick={onOpenOutput}
+          >
+            {isOpeningOutput ? (
+              <LoaderCircle className="spin" aria-hidden="true" />
+            ) : (
+              <FolderOpen aria-hidden="true" />
+            )}
+            打开文件位置
+          </button>
           <button
             type="button"
             className="secondary-button"
@@ -67,8 +90,7 @@ export function TranscriptPanel({
             ) : (
               <Download aria-hidden="true" />
             )}
-            导出字幕
-            <ChevronDown className="button-chevron" aria-hidden="true" />
+            导出 {exportFormat.toUpperCase()}
           </button>
         </div>
       </header>

@@ -68,6 +68,11 @@ export const tauriBackend: DesktopBackend = {
     await invoke('export_transcript', { request })
   },
 
+  async openOutputDirectory(jobId: string): Promise<void> {
+    requireDesktopRuntime()
+    await invoke('open_output_directory', { jobId })
+  },
+
   async pickMedia(): Promise<string | null> {
     requireDesktopRuntime()
     const selection = await open({

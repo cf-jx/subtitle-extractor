@@ -7,6 +7,7 @@ use std::{
 use chrono::Utc;
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_shell::ShellExt;
 use uuid::Uuid;
 
 use crate::{
@@ -104,10 +105,12 @@ pub async fn start_job(
         source_kind: request.source_kind,
         source: source.clone(),
         output_dir: path_string(&output_dir)?,
+        export_format: request.export_format,
     };
     let output_stem = safe_output_stem(Path::new(&display_name));
     let lock_root = output_reservation_root(&app)?;
-    let reservation = subtitles::reserve_exports(&lock_root, &output_dir, &output_stem)?;
+    let reservation =
+        subtitles::reserve_export(&lock_root, &output_dir, &output_stem, request.export_format)?;
     let snapshot = JobSnapshot {
         id: job_id.clone(),
         source_kind: request.source_kind,
@@ -187,11 +190,12 @@ pub async fn export_transcript(
                 .unwrap_or(&existing.display_name)
         )
     );
-    subtitles::ensure_exports_available(&output_dir, &stem)?;
+    subtitles::ensure_export_available(&output_dir, &stem, request.export_format)?;
     let segments = request.segments;
+    let export_format = request.export_format;
     let output_dir_for_task = output_dir.clone();
     let outputs = tauri::async_runtime::spawn_blocking(move || {
-        subtitles::write_exports(&output_dir_for_task, &stem, segments)
+        subtitles::write_export(&output_dir_for_task, &stem, segments, export_format)
     })
     .await
     .map_err(|error| format!("导出字幕任务失败：{error}"))??;
@@ -204,6 +208,23 @@ pub async fn export_transcript(
         .ok_or_else(|| "找不到任务".to_string())?;
     emit(&app, &snapshot);
     Ok(snapshot)
+}
+
+#[tauri::command]
+pub fn open_output_directory(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<(), String> {
+    let job = state
+        .get_job(&job_id)
+        .ok_or_else(|| "找不到任务".to_string())?;
+    let output_dir = validate_output_dir(&job.output_dir)?;
+    let path = path_string(&output_dir)?;
+    #[allow(deprecated)]
+    app.shell()
+        .open(path, None)
+        .map_err(|error| format!("无法打开导出位置：{error}"))
 }
 
 async fn run_queued_job(
@@ -378,8 +399,9 @@ async fn execute_pipeline(
         .unwrap_or_else(|| "字幕".into());
     let output_stem = safe_output_stem(Path::new(&display_name));
     let export_segments = segments.clone();
+    let export_format = request.export_format;
     let outputs = tauri::async_runtime::spawn_blocking(move || {
-        subtitles::write_exports(&output_dir, &output_stem, export_segments)
+        subtitles::write_export(&output_dir, &output_stem, export_segments, export_format)
     })
     .await
     .map_err(|error| format!("生成字幕文件任务失败：{error}"))??;

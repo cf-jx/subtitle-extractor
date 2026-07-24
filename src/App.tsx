@@ -4,6 +4,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import type {
   AppInfo,
   DesktopBackend,
+  ExportFormat,
   JobSnapshot,
   SourceKind,
   SubtitleSegment,
@@ -53,6 +54,7 @@ function App({ backend = tauriBackend }: AppProps) {
   const [localPath, setLocalPath] = useState('')
   const [url, setUrl] = useState('')
   const [outputDir, setOutputDir] = useState('')
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('txt')
   const [jobs, setJobs] = useState<JobSnapshot[]>([])
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
@@ -62,6 +64,7 @@ function App({ backend = tauriBackend }: AppProps) {
   const [isStarting, setIsStarting] = useState(false)
   const [isCopying, setIsCopying] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isOpeningOutput, setIsOpeningOutput] = useState(false)
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
@@ -230,6 +233,7 @@ function App({ backend = tauriBackend }: AppProps) {
         sourceKind,
         source,
         outputDir,
+        exportFormat,
       })
       await refreshJobs()
     } catch (error) {
@@ -240,6 +244,7 @@ function App({ backend = tauriBackend }: AppProps) {
   }, [
     backend,
     canStart,
+    exportFormat,
     localPath,
     outputDir,
     refreshJobs,
@@ -314,8 +319,9 @@ function App({ backend = tauriBackend }: AppProps) {
       await backend.exportTranscript({
         jobId: selectedJob.id,
         segments: selectedSegments,
+        exportFormat,
       })
-      setSuccessMessage('TXT、SRT 和 VTT 已导出')
+      setSuccessMessage(`${exportFormat.toUpperCase()} 已导出`)
       await refreshJobs()
     } catch (error) {
       showError(error)
@@ -324,11 +330,29 @@ function App({ backend = tauriBackend }: AppProps) {
     }
   }, [
     backend,
+    exportFormat,
     refreshJobs,
     selectedJob,
     selectedSegments,
     showError,
   ])
+
+  const handleOpenOutput = useCallback(async () => {
+    if (!selectedJob) {
+      setOperationError('请选择一个任务')
+      return
+    }
+
+    setIsOpeningOutput(true)
+    setOperationError(null)
+    try {
+      await backend.openOutputDirectory(selectedJob.id)
+    } catch (error) {
+      showError(error)
+    } finally {
+      setIsOpeningOutput(false)
+    }
+  }, [backend, selectedJob, showError])
 
   const selectJob = useCallback((jobId: string) => {
     setSelectedJobId(jobId)
@@ -409,6 +433,7 @@ function App({ backend = tauriBackend }: AppProps) {
                   localPath={localPath}
                   url={url}
                   outputDir={outputDir}
+                  exportFormat={exportFormat}
                   urlError={urlError}
                   isStarting={isStarting || sourceIsProcessing}
                   isDragging={isDragging}
@@ -418,6 +443,7 @@ function App({ backend = tauriBackend }: AppProps) {
                   onUrlChange={setUrl}
                   onPickMedia={() => void handlePickMedia()}
                   onPickOutput={() => void handlePickOutput()}
+                  onExportFormatChange={setExportFormat}
                   onStart={() => void handleStart()}
                   onDomDragEnter={() => setIsDragging(true)}
                   onDomDragLeave={() => setIsDragging(false)}
@@ -428,9 +454,12 @@ function App({ backend = tauriBackend }: AppProps) {
                   runtimeAvailable={backend.availability.available}
                   isCopying={isCopying}
                   isExporting={isExporting}
+                  isOpeningOutput={isOpeningOutput}
+                  exportFormat={exportFormat}
                   onSegmentChange={handleSegmentChange}
                   onCopy={() => void handleCopy()}
                   onExport={() => void handleExport()}
+                  onOpenOutput={() => void handleOpenOutput()}
                 />
               </div>
 

@@ -8,6 +8,24 @@ pub enum SourceKind {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Txt,
+    Srt,
+    Vtt,
+}
+
+impl ExportFormat {
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Txt => "txt",
+            Self::Srt => "srt",
+            Self::Vtt => "vtt",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum JobStage {
     Queued,
@@ -41,9 +59,9 @@ pub struct TranscriptSegment {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputFiles {
-    pub txt: String,
-    pub srt: String,
-    pub vtt: String,
+    pub txt: Option<String>,
+    pub srt: Option<String>,
+    pub vtt: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -70,6 +88,7 @@ pub struct StartJobRequest {
     pub source_kind: SourceKind,
     pub source: String,
     pub output_dir: String,
+    pub export_format: ExportFormat,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -77,6 +96,7 @@ pub struct StartJobRequest {
 pub struct ExportTranscriptRequest {
     pub job_id: String,
     pub segments: Vec<TranscriptSegment>,
+    pub export_format: ExportFormat,
 }
 
 #[derive(Debug, Clone, Serialize)]
