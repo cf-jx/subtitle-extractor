@@ -33,6 +33,7 @@ Mac 和 Windows 本地字幕提取软件。导入音视频，或粘贴抖音、T
 - pnpm 11+
 - Rust 1.88+
 - CMake
+- LLVM/Clang（Windows 构建需要 `libclang.dll`）
 - macOS 13+，或 Windows 10/11 x64
 
 安装依赖：
@@ -87,6 +88,7 @@ pnpm package:macos -- x86_64-apple-darwin
 Windows x64 必须在 Windows + MSYS2 UCRT64 环境构建：
 
 ```powershell
+$env:LIBCLANG_PATH = Split-Path -Parent (Get-Command clang.exe).Source
 pnpm runtime:fetch --target x86_64-pc-windows-msvc
 C:\msys64\usr\bin\bash.exe -lc "export PATH=/ucrt64/bin:/usr/bin:\$PATH; cd /c/path/to/project; bash scripts/build-ffmpeg-windows.sh x86_64-pc-windows-msvc"
 pnpm runtime:verify:windows

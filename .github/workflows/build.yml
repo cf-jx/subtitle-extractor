@@ -83,6 +83,17 @@ jobs:
           targets: x86_64-pc-windows-msvc
           components: clippy,rustfmt
 
+      - name: Configure libclang for bindgen
+        shell: pwsh
+        run: |
+          $ClangPath = (Get-Command clang.exe -ErrorAction Stop).Source
+          $LibclangDirectory = Split-Path -Parent $ClangPath
+          $LibclangPath = Join-Path $LibclangDirectory "libclang.dll"
+          if (-not (Test-Path -LiteralPath $LibclangPath -PathType Leaf)) {
+            throw "libclang.dll was not found next to clang.exe: $LibclangPath"
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "LIBCLANG_PATH=$LibclangDirectory" -Encoding utf8
+
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64

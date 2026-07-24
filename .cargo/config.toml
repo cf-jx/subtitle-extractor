@@ -1,6 +1,5 @@
 [env]
 GGML_NATIVE = "OFF"
-WHISPER_DONT_GENERATE_BINDINGS = "1"
 
 [target.aarch64-apple-darwin.env]
 MACOSX_DEPLOYMENT_TARGET = "13.0"
