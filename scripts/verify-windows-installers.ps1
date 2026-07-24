@@ -277,7 +277,7 @@ try {
     )
     $Summary = $Database.GetType().InvokeMember(
       "SummaryInformation",
-      [System.Reflection.BindingFlags]::InvokeMethod,
+      [System.Reflection.BindingFlags]::GetProperty,
       $null,
       $Database,
       @(0)
@@ -315,7 +315,7 @@ $HashLines = foreach ($InstallerFile in @($NsisInstallers + $MsiInstallers)) {
   "$Digest  $($InstallerFile.Name)"
 }
 $HashManifest = Join-Path $BundleRoot "SHA256SUMS.txt"
-$HashLines | Sort-Object | Set-Content -LiteralPath $HashManifest -Encoding ascii
+$HashLines | Sort-Object | Set-Content -LiteralPath $HashManifest -Encoding utf8NoBOM
 
 $SmokeRoot = "$($env:SystemDrive)\subtitle-extractor-installer-smoke-$PID"
 if ($SmokeRoot -notmatch "^[A-Za-z]:\\subtitle-extractor-installer-smoke-\d+$") {

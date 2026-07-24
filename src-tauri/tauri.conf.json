@@ -64,6 +64,9 @@
       "webviewInstallMode": {
         "type": "downloadBootstrapper",
         "silent": true
+      },
+      "wix": {
+        "language": "zh-CN"
       }
     },
     "android": {
