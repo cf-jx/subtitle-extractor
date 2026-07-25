@@ -85,7 +85,7 @@ These two images are the visual source of truth for the desktop UI.
 - Copy exports plain text. Export format and timestamp retention are separate controls. TXT can include or omit timestamps; SRT and VTT keep the timestamps required by their standards.
 - Completed tasks expose an action that opens the export directory.
 - Keyboard focus is always visible.
-- The layout remains usable at 1024×680 and scales cleanly above 1440×900.
+- The full primary workflow remains visible without source-panel scrolling at 1024×800 and scales cleanly above 1440×900.
 
 ## Intentional platform behavior
 
