@@ -69,7 +69,7 @@ These two images are the visual source of truth for the desktop UI.
 - Source form: segmented local/URL input, output folder selector, primary action.
 - Transcript panel: empty state or editable timestamped segments.
 - Task table: stage, progress, status, and task actions.
-- Dialogs: errors, overwrite confirmation, and settings.
+- Dialogs: errors and overwrite confirmation.
 - Buttons: primary, secondary, quiet, and danger.
 - Status: queued, active, completed, failed, and cancelled.
 
@@ -82,7 +82,7 @@ These two images are the visual source of truth for the desktop UI.
 - Active jobs can be cancelled.
 - Progress is stage-aware and never fabricated when total work is unknown.
 - Completed transcript segments are editable before export.
-- Copy exports plain text. The selected export format writes TXT, SRT, or VTT.
+- Copy exports plain text. Export format and timestamp retention are separate controls. TXT can include or omit timestamps; SRT and VTT keep the timestamps required by their standards.
 - Completed tasks expose an action that opens the export directory.
 - Keyboard focus is always visible.
 - The layout remains usable at 1024×680 and scales cleanly above 1440×900.

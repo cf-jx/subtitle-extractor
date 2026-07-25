@@ -1,10 +1,11 @@
 import {
   CheckCircle2,
+  Clock3,
   FileVideo2,
   Folder,
   Link2,
   LoaderCircle,
-  Upload,
+  PawPrint,
 } from 'lucide-react'
 import type { ExportFormat, SourceKind } from '../backend/types'
 import { filenameFromPath } from '../lib/transcript'
@@ -15,6 +16,7 @@ interface SourcePanelProps {
   url: string
   outputDir: string
   exportFormat: ExportFormat
+  includeTimestamps: boolean
   urlError: string | null
   isStarting: boolean
   isDragging: boolean
@@ -25,6 +27,7 @@ interface SourcePanelProps {
   onPickMedia: () => void
   onPickOutput: () => void
   onExportFormatChange: (format: ExportFormat) => void
+  onIncludeTimestampsChange: (include: boolean) => void
   onStart: () => void
   onDomDragEnter: () => void
   onDomDragLeave: () => void
@@ -36,6 +39,7 @@ export function SourcePanel({
   url,
   outputDir,
   exportFormat,
+  includeTimestamps,
   urlError,
   isStarting,
   isDragging,
@@ -46,6 +50,7 @@ export function SourcePanel({
   onPickMedia,
   onPickOutput,
   onExportFormatChange,
+  onIncludeTimestampsChange,
   onStart,
   onDomDragEnter,
   onDomDragLeave,
@@ -54,9 +59,10 @@ export function SourcePanel({
 
   return (
     <section className="panel source-panel" aria-labelledby="source-title">
-      <h2 id="source-title" className="visually-hidden">
-        视频来源
-      </h2>
+      <header className="source-heading">
+        <FileVideo2 aria-hidden="true" />
+        <h2 id="source-title">视频来源</h2>
+      </header>
 
       <div className="source-tabs" role="tablist" aria-label="视频来源">
         <button
@@ -180,7 +186,7 @@ export function SourcePanel({
                 <strong>{format.toUpperCase()}</strong>
                 <span>
                   {format === 'txt'
-                    ? '纯文案'
+                    ? '文本文档'
                     : format === 'srt'
                       ? '通用字幕'
                       : '网页字幕'}
@@ -190,25 +196,52 @@ export function SourcePanel({
           </div>
         </fieldset>
 
-        <button
-          type="button"
-          className="primary-button start-button"
-          disabled={!canStart || isStarting}
-          onClick={onStart}
-        >
-          {isStarting ? (
-            <>
-              <LoaderCircle className="spin" aria-hidden="true" />
-              正在处理
-            </>
-          ) : (
-            <>
-              <Upload aria-hidden="true" />
-              开始提取
-            </>
-          )}
-        </button>
+        <div className="timeline-field">
+          <div className="timeline-copy">
+            <Clock3 aria-hidden="true" />
+            <span>
+              <strong>保留时间轴</strong>
+              <small>
+                {exportFormat === 'txt'
+                  ? '关闭后仅导出文案内容'
+                  : '字幕格式按标准始终保留时间轴'}
+              </small>
+            </span>
+          </div>
+          <button
+            type="button"
+            className="timeline-switch"
+            role="switch"
+            aria-label="保留时间轴"
+            aria-checked={
+              exportFormat === 'txt' ? includeTimestamps : true
+            }
+            disabled={exportFormat !== 'txt'}
+            onClick={() => onIncludeTimestampsChange(!includeTimestamps)}
+          >
+            <span aria-hidden="true" />
+          </button>
+        </div>
+
       </div>
+      <button
+        type="button"
+        className="primary-button start-button"
+        disabled={!canStart || isStarting}
+        onClick={onStart}
+      >
+        {isStarting ? (
+          <>
+            <LoaderCircle className="spin" aria-hidden="true" />
+            正在处理
+          </>
+        ) : (
+          <>
+            <PawPrint aria-hidden="true" />
+            开始提取
+          </>
+        )}
+      </button>
     </section>
   )
 }

@@ -161,10 +161,21 @@ pub fn normalize_segments(
     Ok(segments)
 }
 
-pub fn render_txt(segments: &[TranscriptSegment]) -> String {
+pub fn render_txt(segments: &[TranscriptSegment], include_timestamps: bool) -> String {
     let mut output = segments
         .iter()
-        .map(|segment| segment.text.trim())
+        .map(|segment| {
+            if include_timestamps {
+                format!(
+                    "[{} --> {}] {}",
+                    format_srt_timestamp(segment.start_ms),
+                    format_srt_timestamp(segment.end_ms),
+                    segment.text.trim()
+                )
+            } else {
+                segment.text.trim().to_string()
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     output.push('\n');
@@ -204,10 +215,11 @@ pub fn write_export(
     output_stem: &str,
     segments: Vec<TranscriptSegment>,
     export_format: ExportFormat,
+    include_timestamps: bool,
 ) -> Result<OutputFiles, String> {
     let segments = normalize_segments(segments)?;
     let content = match export_format {
-        ExportFormat::Txt => render_txt(&segments),
+        ExportFormat::Txt => render_txt(&segments, include_timestamps),
         ExportFormat::Srt => render_srt(&segments),
         ExportFormat::Vtt => render_vtt(&segments),
     };
@@ -325,6 +337,23 @@ mod tests {
     }
 
     #[test]
+    fn renders_txt_with_timestamps() {
+        assert_eq!(
+            render_txt(&example_segments(), true),
+            "[00:00:00,000 --> 00:00:01,250] 第一句。\n\
+[00:00:01,500 --> 00:00:03,050] Second line.\n"
+        );
+    }
+
+    #[test]
+    fn renders_txt_without_timestamps() {
+        assert_eq!(
+            render_txt(&example_segments(), false),
+            "第一句。\nSecond line.\n"
+        );
+    }
+
+    #[test]
     fn rejects_invalid_timestamps() {
         assert!(parse_srt("1\n00:00:02,000 --> 00:00:01,000\n错误\n").is_err());
     }
@@ -332,8 +361,14 @@ mod tests {
     #[test]
     fn writes_utf8_exports_without_overwriting_existing_files() {
         let output = tempdir().unwrap();
-        let files =
-            write_export(output.path(), "访谈", example_segments(), ExportFormat::Srt).unwrap();
+        let files = write_export(
+            output.path(),
+            "访谈",
+            example_segments(),
+            ExportFormat::Srt,
+            true,
+        )
+        .unwrap();
 
         assert!(fs::read_to_string(files.srt.as_ref().unwrap())
             .unwrap()
@@ -341,8 +376,14 @@ mod tests {
         assert!(files.txt.is_none());
         assert!(files.vtt.is_none());
 
-        let error =
-            write_export(output.path(), "访谈", example_segments(), ExportFormat::Srt).unwrap_err();
+        let error = write_export(
+            output.path(),
+            "访谈",
+            example_segments(),
+            ExportFormat::Srt,
+            true,
+        )
+        .unwrap_err();
         assert!(error.contains("输出文件已存在"));
 
         remove_exports(&files);

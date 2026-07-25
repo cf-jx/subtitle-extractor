@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Info, ShieldCheck, X } from 'lucide-react'
+import { CheckCircle2, Info, X } from 'lucide-react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import type {
   AppInfo,
@@ -11,8 +11,6 @@ import type {
   Unlisten,
 } from './backend/types'
 import { tauriBackend } from './backend/tauriBackend'
-import { AppSidebar, type AppView } from './components/AppSidebar'
-import { SettingsDialog } from './components/SettingsDialog'
 import { SourcePanel } from './components/SourcePanel'
 import { TaskQueue } from './components/TaskQueue'
 import { TranscriptPanel } from './components/TranscriptPanel'
@@ -22,10 +20,17 @@ import {
   upsertJob,
   validateVideoUrl,
 } from './lib/transcript'
+import yierBubuBrand from './assets/yier-bubu-brand.png'
 import './App.css'
 
 interface AppProps {
   backend?: DesktopBackend
+  initialDraft?: {
+    sourceKind: SourceKind
+    localPath: string
+    url: string
+    outputDir: string
+  }
 }
 
 function messageFromError(error: unknown): string {
@@ -47,14 +52,15 @@ function mergeJobList(
   return snapshots.reduce(upsertJob, current)
 }
 
-function App({ backend = tauriBackend }: AppProps) {
-  const [view, setView] = useState<AppView>('new')
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sourceKind, setSourceKind] = useState<SourceKind>('local')
-  const [localPath, setLocalPath] = useState('')
-  const [url, setUrl] = useState('')
-  const [outputDir, setOutputDir] = useState('')
+function App({ backend = tauriBackend, initialDraft }: AppProps) {
+  const [sourceKind, setSourceKind] = useState<SourceKind>(
+    initialDraft?.sourceKind ?? 'local',
+  )
+  const [localPath, setLocalPath] = useState(initialDraft?.localPath ?? '')
+  const [url, setUrl] = useState(initialDraft?.url ?? '')
+  const [outputDir, setOutputDir] = useState(initialDraft?.outputDir ?? '')
   const [exportFormat, setExportFormat] = useState<ExportFormat>('txt')
+  const [includeTimestamps, setIncludeTimestamps] = useState(true)
   const [jobs, setJobs] = useState<JobSnapshot[]>([])
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
@@ -234,6 +240,7 @@ function App({ backend = tauriBackend }: AppProps) {
         source,
         outputDir,
         exportFormat,
+        includeTimestamps,
       })
       await refreshJobs()
     } catch (error) {
@@ -245,6 +252,7 @@ function App({ backend = tauriBackend }: AppProps) {
     backend,
     canStart,
     exportFormat,
+    includeTimestamps,
     localPath,
     outputDir,
     refreshJobs,
@@ -320,6 +328,7 @@ function App({ backend = tauriBackend }: AppProps) {
         jobId: selectedJob.id,
         segments: selectedSegments,
         exportFormat,
+        includeTimestamps,
       })
       setSuccessMessage(`${exportFormat.toUpperCase()} 已导出`)
       await refreshJobs()
@@ -331,6 +340,7 @@ function App({ backend = tauriBackend }: AppProps) {
   }, [
     backend,
     exportFormat,
+    includeTimestamps,
     refreshJobs,
     selectedJob,
     selectedSegments,
@@ -354,156 +364,106 @@ function App({ backend = tauriBackend }: AppProps) {
     }
   }, [backend, selectedJob, showError])
 
-  const selectJob = useCallback((jobId: string) => {
-    setSelectedJobId(jobId)
-    setView('new')
-  }, [])
-
-  const modelName = appInfo?.modelName || 'Whisper Small'
-
   return (
     <div className="app-shell">
-      <AppSidebar
-        currentView={view}
-        onViewChange={setView}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-
       <div className="app-main">
         <header className="app-toolbar">
-          <span className="local-processing">
-            <ShieldCheck aria-hidden="true" />
-            仅在本机处理
-          </span>
-          <label className="model-select">
-            <span className="visually-hidden">识别模型</span>
-            <select value={modelName} disabled>
-              <option>{modelName}</option>
-            </select>
-          </label>
+          <div className="app-brand">
+            <img src={yierBubuBrand} alt="" />
+            <div>
+              <strong>文案提取</strong>
+              <span>本地视频文案与字幕工具</span>
+            </div>
+          </div>
         </header>
 
         <main className="app-content">
-          {view === 'new' ? (
-            <>
-              <div className="page-heading">
-                <h1>提取视频文案</h1>
-                {!backend.availability.available ? (
-                  <div className="runtime-notice" role="status">
-                    <Info aria-hidden="true" />
-                    <span>{backend.availability.reason}</span>
-                  </div>
-                ) : appInfo?.modelReady === false ? (
-                  <div className="runtime-notice model-warning" role="alert">
-                    <Info aria-hidden="true" />
-                    <span>缺少本地字幕模型</span>
-                  </div>
-                ) : null}
-              </div>
+          {!backend.availability.available ? (
+            <div className="runtime-notice" role="status">
+              <Info aria-hidden="true" />
+              <span>{backend.availability.reason}</span>
+            </div>
+          ) : appInfo?.modelReady === false ? (
+            <div className="runtime-notice model-warning" role="alert">
+              <Info aria-hidden="true" />
+              <span>缺少本地字幕模型</span>
+            </div>
+          ) : null}
 
-              {operationError ? (
-                <div className="feedback-banner error" role="alert">
-                  <span>{operationError}</span>
-                  <button
-                    type="button"
-                    aria-label="关闭错误提示"
-                    onClick={() => setOperationError(null)}
-                  >
-                    <X aria-hidden="true" />
-                  </button>
-                </div>
-              ) : null}
-              {successMessage ? (
-                <div className="feedback-banner success" role="status">
-                  <CheckCircle2 aria-hidden="true" />
-                  <span>{successMessage}</span>
-                  <button
-                    type="button"
-                    aria-label="关闭成功提示"
-                    onClick={() => setSuccessMessage(null)}
-                  >
-                    <X aria-hidden="true" />
-                  </button>
-                </div>
-              ) : null}
+          {operationError ? (
+            <div className="feedback-banner error" role="alert">
+              <span>{operationError}</span>
+              <button
+                type="button"
+                aria-label="关闭错误提示"
+                onClick={() => setOperationError(null)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          {successMessage ? (
+            <div className="feedback-banner success" role="status">
+              <CheckCircle2 aria-hidden="true" />
+              <span>{successMessage}</span>
+              <button
+                type="button"
+                aria-label="关闭成功提示"
+                onClick={() => setSuccessMessage(null)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
 
-              <div className="workspace-grid">
-                <SourcePanel
-                  sourceKind={sourceKind}
-                  localPath={localPath}
-                  url={url}
-                  outputDir={outputDir}
-                  exportFormat={exportFormat}
-                  urlError={urlError}
-                  isStarting={isStarting || sourceIsProcessing}
-                  isDragging={isDragging}
-                  runtimeAvailable={backend.availability.available}
-                  canStart={canStart}
-                  onSourceKindChange={setSourceKind}
-                  onUrlChange={setUrl}
-                  onPickMedia={() => void handlePickMedia()}
-                  onPickOutput={() => void handlePickOutput()}
-                  onExportFormatChange={setExportFormat}
-                  onStart={() => void handleStart()}
-                  onDomDragEnter={() => setIsDragging(true)}
-                  onDomDragLeave={() => setIsDragging(false)}
-                />
-                <TranscriptPanel
-                  job={selectedJob}
-                  segments={selectedSegments}
-                  runtimeAvailable={backend.availability.available}
-                  isCopying={isCopying}
-                  isExporting={isExporting}
-                  isOpeningOutput={isOpeningOutput}
-                  exportFormat={exportFormat}
-                  onSegmentChange={handleSegmentChange}
-                  onCopy={() => void handleCopy()}
-                  onExport={() => void handleExport()}
-                  onOpenOutput={() => void handleOpenOutput()}
-                />
-              </div>
+          <div className="workspace-grid">
+            <SourcePanel
+              sourceKind={sourceKind}
+              localPath={localPath}
+              url={url}
+              outputDir={outputDir}
+              exportFormat={exportFormat}
+              includeTimestamps={includeTimestamps}
+              urlError={urlError}
+              isStarting={isStarting || sourceIsProcessing}
+              isDragging={isDragging}
+              runtimeAvailable={backend.availability.available}
+              canStart={canStart}
+              onSourceKindChange={setSourceKind}
+              onUrlChange={setUrl}
+              onPickMedia={() => void handlePickMedia()}
+              onPickOutput={() => void handlePickOutput()}
+              onExportFormatChange={setExportFormat}
+              onIncludeTimestampsChange={setIncludeTimestamps}
+              onStart={() => void handleStart()}
+              onDomDragEnter={() => setIsDragging(true)}
+              onDomDragLeave={() => setIsDragging(false)}
+            />
+            <TranscriptPanel
+              job={selectedJob}
+              segments={selectedSegments}
+              runtimeAvailable={backend.availability.available}
+              isCopying={isCopying}
+              isExporting={isExporting}
+              isOpeningOutput={isOpeningOutput}
+              exportFormat={exportFormat}
+              onSegmentChange={handleSegmentChange}
+              onCopy={() => void handleCopy()}
+              onExport={() => void handleExport()}
+              onOpenOutput={() => void handleOpenOutput()}
+            />
+          </div>
 
-              <TaskQueue
-                jobs={jobs}
-                selectedJobId={selectedJobId}
-                cancellingJobId={cancellingJobId}
-                onSelect={setSelectedJobId}
-                onCancel={(jobId) => void handleCancel(jobId)}
-              />
-            </>
-          ) : (
-            <section className="history-view">
-              <div className="page-heading">
-                <h1>本次任务</h1>
-              </div>
-              {operationError ? (
-                <div className="feedback-banner error" role="alert">
-                  <span>{operationError}</span>
-                  <button
-                    type="button"
-                    aria-label="关闭错误提示"
-                    onClick={() => setOperationError(null)}
-                  >
-                    <X aria-hidden="true" />
-                  </button>
-                </div>
-              ) : null}
-              <TaskQueue
-                jobs={jobs}
-                selectedJobId={selectedJobId}
-                cancellingJobId={cancellingJobId}
-                onSelect={selectJob}
-                onCancel={(jobId) => void handleCancel(jobId)}
-              />
-            </section>
-          )}
+          <TaskQueue
+            jobs={jobs}
+            selectedJobId={selectedJobId}
+            cancellingJobId={cancellingJobId}
+            onSelect={setSelectedJobId}
+            onCancel={(jobId) => void handleCancel(jobId)}
+          />
         </main>
       </div>
 
-      <SettingsDialog
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
     </div>
   )
 }

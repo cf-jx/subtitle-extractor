@@ -89,6 +89,7 @@ pub struct StartJobRequest {
     pub source: String,
     pub output_dir: String,
     pub export_format: ExportFormat,
+    pub include_timestamps: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,6 +98,7 @@ pub struct ExportTranscriptRequest {
     pub job_id: String,
     pub segments: Vec<TranscriptSegment>,
     pub export_format: ExportFormat,
+    pub include_timestamps: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

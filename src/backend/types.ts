@@ -54,12 +54,14 @@ export interface StartJobRequest {
   source: string
   outputDir: string
   exportFormat: ExportFormat
+  includeTimestamps: boolean
 }
 
 export interface ExportTranscriptRequest {
   jobId: string
   segments: SubtitleSegment[]
   exportFormat: ExportFormat
+  includeTimestamps: boolean
 }
 
 export interface BackendAvailability {

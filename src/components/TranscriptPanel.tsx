@@ -106,7 +106,11 @@ export function TranscriptPanel({
             {segments.map((segment, position) => (
               <li className="segment-row" key={segment.index}>
                 <span className="segment-number">{position + 1}</span>
-                <time>{formatTimestamp(segment.startMs)}</time>
+                <time>
+                  {formatTimestamp(segment.startMs)}
+                  <span aria-hidden="true"> → </span>
+                  {formatTimestamp(segment.endMs)}
+                </time>
                 <textarea
                   value={segment.text}
                   aria-label={`第 ${position + 1} 段文案`}

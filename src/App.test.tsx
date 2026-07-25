@@ -147,6 +147,29 @@ describe('App', () => {
       source: '/Users/tester/Videos/示例视频.mp4',
       outputDir: '/Users/tester/Documents/文案输出',
       exportFormat: 'srt',
+      includeTimestamps: true,
+    })
+  })
+
+  it('keeps timestamp selection independent from the export format', async () => {
+    const user = userEvent.setup()
+    const { backend } = createBackend()
+    render(<App backend={backend} />)
+
+    await screen.findByText('暂无任务')
+    await user.click(screen.getByTestId('media-drop-zone'))
+    await user.click(screen.getByRole('button', { name: '选择' }))
+    await user.click(
+      screen.getByRole('switch', { name: '保留时间轴' }),
+    )
+    await user.click(screen.getByRole('button', { name: /开始提取/ }))
+
+    expect(backend.startJob).toHaveBeenCalledWith({
+      sourceKind: 'local',
+      source: '/Users/tester/Videos/示例视频.mp4',
+      outputDir: '/Users/tester/Documents/文案输出',
+      exportFormat: 'txt',
+      includeTimestamps: false,
     })
   })
 
@@ -207,6 +230,7 @@ describe('App', () => {
     expect(backend.exportTranscript).toHaveBeenCalledWith({
       jobId: 'job-1',
       exportFormat: 'vtt',
+      includeTimestamps: true,
       segments: [
         processingJob.segments[0],
         { ...processingJob.segments[1], text: '修改后的第二段文案。' },

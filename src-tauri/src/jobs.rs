@@ -106,6 +106,7 @@ pub async fn start_job(
         source: source.clone(),
         output_dir: path_string(&output_dir)?,
         export_format: request.export_format,
+        include_timestamps: request.include_timestamps,
     };
     let output_stem = safe_output_stem(Path::new(&display_name));
     let lock_root = output_reservation_root(&app)?;
@@ -193,9 +194,16 @@ pub async fn export_transcript(
     subtitles::ensure_export_available(&output_dir, &stem, request.export_format)?;
     let segments = request.segments;
     let export_format = request.export_format;
+    let include_timestamps = request.include_timestamps;
     let output_dir_for_task = output_dir.clone();
     let outputs = tauri::async_runtime::spawn_blocking(move || {
-        subtitles::write_export(&output_dir_for_task, &stem, segments, export_format)
+        subtitles::write_export(
+            &output_dir_for_task,
+            &stem,
+            segments,
+            export_format,
+            include_timestamps,
+        )
     })
     .await
     .map_err(|error| format!("导出字幕任务失败：{error}"))??;
@@ -400,8 +408,15 @@ async fn execute_pipeline(
     let output_stem = safe_output_stem(Path::new(&display_name));
     let export_segments = segments.clone();
     let export_format = request.export_format;
+    let include_timestamps = request.include_timestamps;
     let outputs = tauri::async_runtime::spawn_blocking(move || {
-        subtitles::write_export(&output_dir, &output_stem, export_segments, export_format)
+        subtitles::write_export(
+            &output_dir,
+            &output_stem,
+            export_segments,
+            export_format,
+            include_timestamps,
+        )
     })
     .await
     .map_err(|error| format!("生成字幕文件任务失败：{error}"))??;
