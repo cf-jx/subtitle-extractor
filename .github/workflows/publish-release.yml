@@ -1,0 +1,65 @@
+name: Publish desktop release
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful installer build run ID
+        required: true
+      tag:
+        description: Release tag
+        required: true
+        default: v0.1.0
+      target_sha:
+        description: Commit SHA used by the installer build
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified installers
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.build_run_id }}
+          pattern: "*-installers"
+          path: release-assets
+
+      - name: Validate release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find release-assets -type f -name '*.dmg' | wc -l)" -eq 1
+          test "$(find release-assets -type f -name '*.exe' | wc -l)" -eq 1
+          test "$(find release-assets -type f -name '*.msi' | wc -l)" -eq 1
+          test "$(find release-assets -type f -name 'SHA256SUMS.txt' | wc -l)" -eq 1
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "文案提取 $RELEASE_TAG" \
+            --notes "Desktop installers for macOS Apple Silicon and Windows x64."
+
+          while IFS= read -r -d '' asset; do
+            gh release upload "$RELEASE_TAG" "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          done < <(
+            find release-assets -type f \
+              \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' -o -name 'SHA256SUMS.txt' \) \
+              -print0
+          )
