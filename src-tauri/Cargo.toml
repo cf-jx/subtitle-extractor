@@ -1,10 +1,10 @@
 [package]
 name = "subtitle-extractor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local video transcript and subtitle extractor"
 authors = ["SCF"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/cf-jx/subtitle-extractor"
 edition = "2021"
 rust-version = "1.88"
 
@@ -33,7 +33,9 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-dialog = "2.7.2"
 tauri-plugin-log = "2"
+tauri-plugin-process = "2.3.1"
 tauri-plugin-shell = "2.3.5"
+tauri-plugin-updater = "2.10.1"
 tempfile = "3.27"
 thiserror = "2.0"
 tokio = { version = "1.53", features = ["io-util", "macros", "process", "sync", "time"] }

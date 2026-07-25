@@ -149,6 +149,197 @@
   border-color: #bfd5ba;
 }
 
+.update-backdrop {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  padding: 24px;
+  background: rgb(60 43 36 / 32%);
+  inset: 0;
+  place-items: center;
+  backdrop-filter: blur(5px);
+}
+
+.update-dialog {
+  width: min(440px, 100%);
+  padding: 24px;
+  background: #fffdf9;
+  border: 1px solid #e5d3c6;
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgb(62 41 31 / 24%);
+}
+
+.update-dialog-heading {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 52px minmax(0, 1fr) 36px;
+  gap: 14px;
+}
+
+.update-dialog-heading h2,
+.update-dialog-heading p {
+  margin: 0;
+}
+
+.update-dialog-heading h2 {
+  color: #3f3029;
+  font-size: 21px;
+  line-height: 28px;
+}
+
+.update-dialog-heading p {
+  margin-top: 2px;
+  color: #8a766b;
+  font-size: 13px;
+}
+
+.update-mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  color: #8e4d43;
+  background: #ffe7c2;
+  border: 1px solid #e9c786;
+  border-radius: 16px;
+  place-items: center;
+}
+
+.update-mark svg {
+  width: 24px;
+  height: 24px;
+}
+
+.update-close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  color: #8b766b;
+  background: transparent;
+  border-radius: 10px;
+  place-items: center;
+}
+
+.update-close:hover {
+  background: #f6eee7;
+}
+
+.update-close svg {
+  width: 19px;
+  height: 19px;
+}
+
+.update-notes {
+  max-height: 144px;
+  padding: 13px 15px;
+  margin: 20px 0 0;
+  overflow-y: auto;
+  color: #665248;
+  background: #fbf5ee;
+  border: 1px solid #eadfd4;
+  border-radius: 13px;
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-wrap;
+}
+
+.update-progress {
+  margin-top: 20px;
+}
+
+.update-progress > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #715d52;
+  font-size: 13px;
+}
+
+.update-progress-track {
+  height: 8px;
+  overflow: hidden;
+  background: #eee4db;
+  border-radius: 999px;
+}
+
+.update-progress-track span {
+  display: block;
+  height: 100%;
+  background: #dd7667;
+  border-radius: inherit;
+  transition: width 160ms ease;
+}
+
+.update-progress-track span.indeterminate {
+  width: 42%;
+  animation: update-progress-slide 1.2s ease-in-out infinite;
+}
+
+.update-error {
+  padding: 10px 12px;
+  margin: 16px 0 0;
+  color: #9e4843;
+  background: #fff1ee;
+  border: 1px solid #e7afa8;
+  border-radius: 11px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.update-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 22px;
+  gap: 10px;
+}
+
+.update-actions button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  gap: 8px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.update-actions button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.update-actions .button-secondary {
+  color: #6f5b50;
+  background: #fffdf9;
+  border: 1px solid #dfcdc0;
+}
+
+.update-actions .button-primary {
+  color: #fff;
+  background: #dc7466;
+  border: 1px solid #bf5b50;
+  box-shadow: 0 3px 0 #a84d44;
+}
+
+.update-actions .button-primary:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.update-install {
+  min-width: 144px;
+}
+
+@keyframes update-progress-slide {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(340%);
+  }
+}
+
 .workspace-grid {
   display: grid;
   height: min(640px, calc(100vh - 240px));

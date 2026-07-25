@@ -7,6 +7,7 @@ import type {
   FileDropEvent,
   JobSnapshot,
 } from './backend/types'
+import type { UpdateService } from './update/types'
 import App from './App'
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
@@ -95,6 +96,33 @@ function createBackend(
 }
 
 describe('App', () => {
+  it('offers an available update and relaunches after installation', async () => {
+    const user = userEvent.setup()
+    const { backend } = createBackend()
+    const downloadAndInstall = vi.fn(async (onProgress) => {
+      onProgress({ downloadedBytes: 50, totalBytes: 100 })
+    })
+    const updateService: UpdateService = {
+      available: true,
+      check: vi.fn(async () => ({
+        currentVersion: '0.2.0',
+        version: '0.2.1',
+        notes: '修复字幕导出问题。',
+        downloadAndInstall,
+      })),
+      relaunch: vi.fn(async () => undefined),
+    }
+
+    render(<App backend={backend} updateService={updateService} />)
+
+    expect(await screen.findByRole('dialog')).toBeVisible()
+    expect(screen.getByText('0.2.0 → 0.2.1')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '立即更新' }))
+
+    expect(downloadAndInstall).toHaveBeenCalledOnce()
+    expect(updateService.relaunch).toHaveBeenCalledOnce()
+  })
+
   it('shows a clear unavailable state in a regular browser', () => {
     const { backend } = createBackend({
       availability: {

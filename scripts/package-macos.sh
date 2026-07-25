@@ -40,6 +40,18 @@ for program in ffmpeg ffprobe yt-dlp; do
   }
 done
 
-pnpm exec tauri build --target "$TARGET" --bundles app
+TAURI_BUILD_ARGS=(--target "$TARGET" --bundles app)
+if [[ "${CREATE_UPDATER_ARTIFACTS:-0}" == "1" ]]; then
+  [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]] || {
+    echo "TAURI_SIGNING_PRIVATE_KEY is required for updater artifacts." >&2
+    exit 1
+  }
+  TAURI_BUILD_ARGS+=(--config src-tauri/tauri.release.conf.json)
+fi
+
+pnpm exec tauri build "${TAURI_BUILD_ARGS[@]}"
 bash scripts/repair-macos-app-signature.sh "$TARGET"
+if [[ "${CREATE_UPDATER_ARTIFACTS:-0}" == "1" ]]; then
+  bash scripts/create-macos-updater.sh "$TARGET"
+fi
 bash scripts/create-macos-dmg.sh "$TARGET"

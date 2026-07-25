@@ -14,17 +14,25 @@ import { tauriBackend } from './backend/tauriBackend'
 import { SourcePanel } from './components/SourcePanel'
 import { TaskQueue } from './components/TaskQueue'
 import { TranscriptPanel } from './components/TranscriptPanel'
+import { UpdateDialog } from './components/UpdateDialog'
 import {
   transcriptToPlainText,
   terminalStages,
   upsertJob,
   validateVideoUrl,
 } from './lib/transcript'
+import { tauriUpdateService } from './update/tauriUpdateService'
+import type {
+  AvailableUpdate,
+  UpdateProgress,
+  UpdateService,
+} from './update/types'
 import yierBubuBrand from './assets/yier-bubu-brand.png'
 import './App.css'
 
 interface AppProps {
   backend?: DesktopBackend
+  updateService?: UpdateService
   initialDraft?: {
     sourceKind: SourceKind
     localPath: string
@@ -52,7 +60,16 @@ function mergeJobList(
   return snapshots.reduce(upsertJob, current)
 }
 
-function App({ backend = tauriBackend, initialDraft }: AppProps) {
+const initialUpdateProgress: UpdateProgress = {
+  downloadedBytes: 0,
+  totalBytes: null,
+}
+
+function App({
+  backend = tauriBackend,
+  updateService = tauriUpdateService,
+  initialDraft,
+}: AppProps) {
   const [sourceKind, setSourceKind] = useState<SourceKind>(
     initialDraft?.sourceKind ?? 'local',
   )
@@ -75,6 +92,15 @@ function App({ backend = tauriBackend, initialDraft }: AppProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [availableUpdate, setAvailableUpdate] =
+    useState<AvailableUpdate | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<
+    'available' | 'downloading' | 'failed'
+  >('available')
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress>(
+    initialUpdateProgress,
+  )
+  const [updateError, setUpdateError] = useState<string | null>(null)
 
   const urlError = useMemo(
     () => (url.trim() === '' ? null : validateVideoUrl(url)),
@@ -193,6 +219,34 @@ function App({ backend = tauriBackend, initialDraft }: AppProps) {
       }
     }
   }, [backend, refreshJobs, showError])
+
+  useEffect(() => {
+    if (!backend.availability.available || !updateService.available) {
+      return
+    }
+
+    let disposed = false
+
+    const checkForUpdate = async () => {
+      try {
+        const update = await updateService.check()
+        if (!disposed && update) {
+          setAvailableUpdate(update)
+          setUpdateStatus('available')
+        }
+      } catch (error) {
+        if (!disposed) {
+          console.error('Failed to check for updates', error)
+        }
+      }
+    }
+
+    void checkForUpdate()
+
+    return () => {
+      disposed = true
+    }
+  }, [backend.availability.available, updateService])
 
   const handlePickMedia = useCallback(async () => {
     setOperationError(null)
@@ -364,6 +418,23 @@ function App({ backend = tauriBackend, initialDraft }: AppProps) {
     }
   }, [backend, selectedJob, showError])
 
+  const handleInstallUpdate = useCallback(async () => {
+    if (!availableUpdate) {
+      return
+    }
+
+    setUpdateStatus('downloading')
+    setUpdateProgress(initialUpdateProgress)
+    setUpdateError(null)
+    try {
+      await availableUpdate.downloadAndInstall(setUpdateProgress)
+      await updateService.relaunch()
+    } catch (error) {
+      setUpdateStatus('failed')
+      setUpdateError(`更新失败：${messageFromError(error)}`)
+    }
+  }, [availableUpdate, updateService])
+
   return (
     <div className="app-shell">
       <div className="app-main">
@@ -464,6 +535,16 @@ function App({ backend = tauriBackend, initialDraft }: AppProps) {
         </main>
       </div>
 
+      {availableUpdate ? (
+        <UpdateDialog
+          update={availableUpdate}
+          status={updateStatus}
+          progress={updateProgress}
+          error={updateError}
+          onInstall={() => void handleInstallUpdate()}
+          onDismiss={() => setAvailableUpdate(null)}
+        />
+      ) : null}
     </div>
   )
 }

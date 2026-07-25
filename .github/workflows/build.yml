@@ -7,7 +7,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   macos-arm64:
@@ -49,14 +49,19 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 
       - name: Build repaired Mac app and DMG
+        env:
+          CREATE_UPDATER_ARTIFACTS: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm package:macos aarch64-apple-darwin
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64-installers
           path: |
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
             src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
 
   windows-x64:
@@ -133,9 +138,17 @@ jobs:
           cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
           cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 
-      - name: Build unsigned Windows installers
+      - name: Build Windows installers
         shell: pwsh
-        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles 'nsis,msi'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ("${{ startsWith(github.ref, 'refs/tags/v') }}" -eq "true") {
+            pnpm tauri build --target x86_64-pc-windows-msvc --bundles 'nsis,msi' --config src-tauri/tauri.release.conf.json
+          } else {
+            pnpm tauri build --target x86_64-pc-windows-msvc --bundles 'nsis,msi'
+          }
 
       - name: Verify Windows installers
         shell: pwsh
@@ -146,6 +159,95 @@ jobs:
           name: windows-x64-installers
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
           if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - macos-arm64
+      - windows-x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release version
+        shell: bash
+        run: node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
+
+      - name: Download verified installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-installers"
+          path: downloaded-assets
+
+      - name: Prepare release assets
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          version="${RELEASE_VERSION#v}"
+          mkdir -p release-assets
+
+          mapfile -t dmg_files < <(find downloaded-assets -type f -name '*.dmg')
+          mapfile -t mac_update_files < <(find downloaded-assets -type f -name '*.app.tar.gz')
+          mapfile -t mac_signature_files < <(find downloaded-assets -type f -name '*.app.tar.gz.sig')
+          mapfile -t exe_files < <(find downloaded-assets -type f -name '*.exe')
+          mapfile -t exe_signature_files < <(find downloaded-assets -type f -name '*.exe.sig')
+          mapfile -t msi_files < <(find downloaded-assets -type f -name '*.msi')
+
+          test "${#dmg_files[@]}" -eq 1
+          test "${#mac_update_files[@]}" -eq 1
+          test "${#mac_signature_files[@]}" -eq 1
+          test "${#exe_files[@]}" -eq 1
+          test "${#exe_signature_files[@]}" -eq 1
+          test "${#msi_files[@]}" -eq 1
+
+          mac_dmg="subtitle-extractor_${version}_arm64.dmg"
+          mac_update="subtitle-extractor_${version}_aarch64.app.tar.gz"
+          windows_exe="subtitle-extractor_${version}_x64-setup.exe"
+          windows_msi="subtitle-extractor_${version}_x64_zh-CN.msi"
+
+          cp "${dmg_files[0]}" "release-assets/$mac_dmg"
+          cp "${mac_update_files[0]}" "release-assets/$mac_update"
+          cp "${mac_signature_files[0]}" "release-assets/$mac_update.sig"
+          cp "${exe_files[0]}" "release-assets/$windows_exe"
+          cp "${exe_signature_files[0]}" "release-assets/$windows_exe.sig"
+          cp "${msi_files[0]}" "release-assets/$windows_msi"
+
+          node scripts/create-update-manifest.mjs \
+            release-assets/latest.json \
+            "$version" \
+            "$GITHUB_REPOSITORY" \
+            "$GITHUB_REF_NAME" \
+            "$mac_update" \
+            "release-assets/$mac_update.sig" \
+            "$windows_exe" \
+            "release-assets/$windows_exe.sig"
+
+          (
+            cd release-assets
+            sha256sum \
+              "$mac_dmg" \
+              "$mac_update" \
+              "$windows_exe" \
+              "$windows_msi" \
+              latest.json > SHA256SUMS.txt
+          )
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "文案提取 $GITHUB_REF_NAME" \
+            --notes "支持 macOS Apple Silicon 和 Windows x64。本版本已内置自动更新，安装后可在新版本发布时直接升级。" \
+            release-assets/*

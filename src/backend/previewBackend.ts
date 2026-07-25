@@ -3,6 +3,7 @@ import type {
   JobSnapshot,
   StartJobRequest,
 } from './types'
+import type { UpdateService } from '../update/types'
 
 const previewJob: JobSnapshot = {
   id: 'preview-job',
@@ -73,4 +74,17 @@ export const previewBackend: DesktopBackend = {
   async subscribeFileDrops() {
     return () => undefined
   },
+}
+
+export const previewUpdateService: UpdateService = {
+  available: true,
+  async check() {
+    return {
+      currentVersion: '0.2.0',
+      version: '0.2.1',
+      notes: '优化自动更新体验\n修复字幕导出问题',
+      async downloadAndInstall() {},
+    }
+  },
+  async relaunch() {},
 }

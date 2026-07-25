@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "文案提取",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.scf.subtitleextractor",
   "build": {
     "frontendDist": "../dist",
@@ -71,6 +71,14 @@
     },
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJFRURDQjc4MTY4QUEyNDgKUldSSW9vb1dlTXZ0THJ0b1RGVXVKTFFYQ0dOM1NPVC90QzA0OGphampoQkEweW1RNzRENFB1OEwK",
+      "endpoints": [
+        "https://github.com/cf-jx/subtitle-extractor/releases/latest/download/latest.json"
+      ]
     }
   }
 }

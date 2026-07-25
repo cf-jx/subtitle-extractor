@@ -1,7 +1,7 @@
 {
   "name": "subtitle-extractor",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "packageManager": "pnpm@11.17.0",
   "type": "module",
   "scripts": {
@@ -16,6 +16,8 @@
     "runtime:ffmpeg:windows": "bash scripts/build-ffmpeg-windows.sh",
     "runtime:verify:windows": "node scripts/verify-windows-runtime.mjs",
     "runtime:verify:windows:installers": "pwsh -NoProfile -File scripts/verify-windows-installers.ps1",
+    "version:check": "node scripts/version.mjs --check",
+    "version:set": "node scripts/version.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview"
@@ -24,6 +26,8 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-process": "2.3.1",
+    "@tauri-apps/plugin-updater": "2.10.1",
     "lucide-react": "^1.25.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
