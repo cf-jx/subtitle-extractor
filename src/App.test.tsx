@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -16,6 +16,7 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
 
 const processingJob: JobSnapshot = {
   id: 'job-1',
+  revision: 3,
   sourceKind: 'url',
   source: 'https://www.douyin.com/video/7381234567890123456',
   displayName: '访谈视频.mp4',
@@ -49,6 +50,16 @@ interface BackendFixture {
   emitFileDrop: (event: FileDropEvent) => void
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 function createBackend(
   overrides: Partial<DesktopBackend> = {},
 ): BackendFixture {
@@ -65,7 +76,15 @@ function createBackend(
     listJobs: vi.fn(async () => []),
     startJob: vi.fn(async () => undefined),
     cancelJob: vi.fn(async () => undefined),
-    exportTranscript: vi.fn(async () => undefined),
+    exportTranscript: vi.fn(async (request) => ({
+      ...processingJob,
+      revision: processingJob.revision + 1,
+      stage: 'completed' as const,
+      stageProgress: 100,
+      overallProgress: 100,
+      segments: request.segments,
+      message: '字幕已导出',
+    })),
     openOutputDirectory: vi.fn(async () => undefined),
     pickMedia: vi.fn(async () => '/Users/tester/Videos/示例视频.mp4'),
     pickOutputDirectory: vi.fn(async () => '/Users/tester/Documents/文案输出'),
@@ -121,6 +140,191 @@ describe('App', () => {
 
     expect(downloadAndInstall).toHaveBeenCalledOnce()
     expect(updateService.relaunch).toHaveBeenCalledOnce()
+    expect(screen.getByRole('progressbar', { name: '更新下载进度' })).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    )
+  })
+
+  it('waits for the initial task state before offering an update', async () => {
+    const jobsRequest = createDeferred<JobSnapshot[]>()
+    const { backend } = createBackend({
+      listJobs: vi.fn(() => jobsRequest.promise),
+    })
+    const updateService: UpdateService = {
+      available: true,
+      check: vi.fn(async () => ({
+        currentVersion: '0.2.0',
+        version: '0.2.1',
+        notes: null,
+        downloadAndInstall: vi.fn(async () => undefined),
+      })),
+      relaunch: vi.fn(async () => undefined),
+    }
+
+    render(<App backend={backend} updateService={updateService} />)
+
+    expect(
+      await screen.findByText(/新版本 0\.2\.1 已就绪，正在读取任务状态/),
+    ).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    act(() => {
+      jobsRequest.resolve([])
+    })
+    expect(await screen.findByRole('dialog')).toBeVisible()
+  })
+
+  it('keeps keyboard focus inside the update dialog and closes with Escape', async () => {
+    const user = userEvent.setup()
+    const { backend } = createBackend()
+    const updateService: UpdateService = {
+      available: true,
+      check: vi.fn(async () => ({
+        currentVersion: '0.2.0',
+        version: '0.2.1',
+        notes: null,
+        downloadAndInstall: vi.fn(async () => undefined),
+      })),
+      relaunch: vi.fn(async () => undefined),
+    }
+
+    render(<App backend={backend} updateService={updateService} />)
+
+    const installButton = await screen.findByRole('button', {
+      name: '立即更新',
+    })
+    expect(installButton).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: '稍后更新' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('defers an available update until active jobs finish', async () => {
+    const fixture = createBackend({
+      listJobs: vi.fn(async () => [processingJob]),
+    })
+    const update = {
+      currentVersion: '0.2.0',
+      version: '0.2.1',
+      notes: null,
+      downloadAndInstall: vi.fn(async () => undefined),
+    }
+    const updateService: UpdateService = {
+      available: true,
+      check: vi.fn(async () => update),
+      relaunch: vi.fn(async () => undefined),
+    }
+
+    render(<App backend={fixture.backend} updateService={updateService} />)
+
+    expect(
+      await screen.findByText(/新版本 0\.2\.1 已就绪，当前任务完成后即可更新/),
+    ).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    act(() => {
+      fixture.emitJob({
+        ...processingJob,
+        revision: processingJob.revision + 1,
+        stage: 'completed',
+        stageProgress: 100,
+        overallProgress: 100,
+        message: '字幕提取完成',
+      })
+    })
+
+    expect(await screen.findByRole('dialog')).toBeVisible()
+  })
+
+  it('defers an available update until edited subtitles are exported', async () => {
+    const user = userEvent.setup()
+    const completedJob: JobSnapshot = {
+      ...processingJob,
+      revision: 4,
+      stage: 'completed',
+      stageProgress: 100,
+      overallProgress: 100,
+      message: '字幕提取完成',
+    }
+    const { backend } = createBackend({
+      listJobs: vi.fn(async () => [completedJob]),
+    })
+    let resolveUpdate:
+      | ((update: Awaited<ReturnType<UpdateService['check']>>) => void)
+      | undefined
+    const updateService: UpdateService = {
+      available: true,
+      check: vi.fn(
+        () =>
+          new Promise<Awaited<ReturnType<UpdateService['check']>>>((resolve) => {
+            resolveUpdate = resolve
+          }),
+      ),
+      relaunch: vi.fn(async () => undefined),
+    }
+    const update = {
+      currentVersion: '0.2.0',
+      version: '0.2.1',
+      notes: null,
+      downloadAndInstall: vi.fn(async () => undefined),
+    }
+
+    render(<App backend={backend} updateService={updateService} />)
+
+    const firstSegment = await screen.findByLabelText('第 1 段文案')
+    await user.clear(firstSegment)
+    await user.type(firstSegment, '修改后的第一段文案。')
+    act(() => resolveUpdate?.(update))
+
+    expect(
+      await screen.findByText(/请先导出已修改的字幕，再更新/),
+    ).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /导出 TXT/ }))
+    expect(await screen.findByRole('dialog')).toBeVisible()
+  })
+
+  it('lets the user retry app initialization without losing other features', async () => {
+    const user = userEvent.setup()
+    const getAppInfo = vi
+      .fn<DesktopBackend['getAppInfo']>()
+      .mockRejectedValueOnce(new Error('model check failed'))
+      .mockResolvedValue({
+        platform: 'macos',
+        modelName: 'Whisper Small',
+        modelReady: true,
+      })
+    const { backend } = createBackend({ getAppInfo })
+
+    render(<App backend={backend} />)
+
+    expect(await screen.findByText(/字幕组件初始化失败/)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '重试' }))
+    expect(
+      await screen.findByRole('button', {
+        name: /开始提取.*请选择视频或音频文件/,
+      }),
+    ).toBeVisible()
+    expect(getAppInfo).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps extraction available when loading the task list fails', async () => {
+    const user = userEvent.setup()
+    const { backend } = createBackend({
+      listJobs: vi.fn(async () => {
+        throw new Error('task list failed')
+      }),
+    })
+
+    render(<App backend={backend} />)
+
+    expect(await screen.findByText('task list failed')).toBeVisible()
+    await user.click(screen.getByTestId('media-drop-zone'))
+    await user.click(screen.getByRole('button', { name: '选择' }))
+    expect(screen.getByRole('button', { name: /开始提取/ })).toBeEnabled()
   })
 
   it('shows a clear unavailable state in a regular browser', () => {
@@ -153,7 +357,7 @@ describe('App', () => {
 
     render(<App backend={backend} />)
 
-    expect(await screen.findByText('缺少本地字幕模型')).toBeVisible()
+    expect(await screen.findByText(/缺少本地字幕模型/)).toBeVisible()
     expect(screen.getByRole('button', { name: /开始提取/ })).toBeDisabled()
   })
 
@@ -207,7 +411,7 @@ describe('App', () => {
     render(<App backend={backend} />)
 
     await screen.findByText('暂无任务')
-    await user.click(screen.getByRole('tab', { name: '视频链接' }))
+    await user.click(screen.getByRole('button', { name: '视频链接' }))
     const input = screen.getByLabelText('视频链接')
     await user.type(input, 'https://tiktok.com.evil.example/video/1')
 
@@ -222,7 +426,7 @@ describe('App', () => {
     render(<App backend={backend} />)
 
     await screen.findByText('暂无任务')
-    await user.click(screen.getByRole('tab', { name: '视频链接' }))
+    await user.click(screen.getByRole('button', { name: '视频链接' }))
     await user.type(
       screen.getByLabelText('视频链接'),
       'https://user:pass@www.tiktok.com/@creator/video/1',
@@ -236,9 +440,28 @@ describe('App', () => {
   it('edits, copies, and exports transcript segments through the backend', async () => {
     const user = userEvent.setup()
     const clipboardWrite = vi.mocked(writeText)
+    const completedJob: JobSnapshot = {
+      ...processingJob,
+      revision: 4,
+      stage: 'completed',
+      stageProgress: 100,
+      overallProgress: 100,
+      message: '字幕提取完成',
+    }
+    const editedSegments = [
+      completedJob.segments[0],
+      { ...completedJob.segments[1], text: '修改后的第二段文案。' },
+    ]
+    const persistedJob: JobSnapshot = {
+      ...completedJob,
+      revision: 5,
+      segments: editedSegments,
+      message: '字幕已导出',
+    }
 
     const { backend } = createBackend({
-      listJobs: vi.fn(async () => [processingJob]),
+      listJobs: vi.fn(async () => [completedJob]),
+      exportTranscript: vi.fn(async () => persistedJob),
     })
     render(<App backend={backend} />)
 
@@ -259,14 +482,60 @@ describe('App', () => {
       jobId: 'job-1',
       exportFormat: 'vtt',
       includeTimestamps: true,
-      segments: [
-        processingJob.segments[0],
-        { ...processingJob.segments[1], text: '修改后的第二段文案。' },
-      ],
+      segments: editedSegments,
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('第 2 段文案')).toHaveValue(
+        '修改后的第二段文案。',
+      )
     })
 
     await user.click(screen.getByRole('button', { name: '打开文件位置' }))
     expect(backend.openOutputDirectory).toHaveBeenCalledWith('job-1')
+  })
+
+  it('locks transcript editing while an export is pending', async () => {
+    const user = userEvent.setup()
+    const exportRequest = createDeferred<JobSnapshot>()
+    const completedJob: JobSnapshot = {
+      ...processingJob,
+      revision: 4,
+      stage: 'completed',
+      stageProgress: 100,
+      overallProgress: 100,
+      message: '字幕提取完成',
+    }
+    const editedSegments = completedJob.segments.map((segment, index) =>
+      index === 0 ? { ...segment, text: '导出中的已修改文案。' } : segment,
+    )
+    const persistedJob: JobSnapshot = {
+      ...completedJob,
+      revision: 5,
+      segments: editedSegments,
+      message: '字幕已导出',
+    }
+    const { backend } = createBackend({
+      listJobs: vi.fn(async () => [completedJob]),
+      exportTranscript: vi.fn(() => exportRequest.promise),
+    })
+
+    render(<App backend={backend} />)
+
+    const firstSegment = await screen.findByLabelText('第 1 段文案')
+    await user.clear(firstSegment)
+    await user.type(firstSegment, '导出中的已修改文案。')
+    await user.click(screen.getByRole('button', { name: /导出 TXT/ }))
+
+    expect(firstSegment).toBeDisabled()
+    act(() => {
+      exportRequest.resolve(persistedJob)
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('第 1 段文案')).toBeEnabled()
+      expect(screen.getByLabelText('第 1 段文案')).toHaveValue(
+        '导出中的已修改文案。',
+      )
+    })
   })
 
   it('deduplicates repeated job events and cancels an active job', async () => {

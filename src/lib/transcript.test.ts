@@ -13,6 +13,7 @@ describe('validateVideoUrl', () => {
     'https://www.douyin.com/video/7381234567890123456',
     'https://v.douyin.com/abc123/',
     'https://www.iesdouyin.com/share/video/7381234567890123456/',
+    'https://m.douyin.com/share/video/7381234567890123456/',
     'https://www.tiktok.com/@creator/video/7381234567890123456',
     'https://vm.tiktok.com/ZM12345/',
     'https://vt.tiktok.com/ZM12345/',
@@ -24,6 +25,9 @@ describe('validateVideoUrl', () => {
   it.each([
     'http://www.douyin.com/video/1',
     'https://tiktok.com.evil.example/video/1',
+    'https://evil.douyin.com/video/7381234567890123456',
+    'https://m.tiktok.com/@creator/video/7381234567890123456',
+    'https://www.tiktok.com./@creator/video/7381234567890123456',
     'https://douyin.com@evil.example/video/1',
     'https://127.0.0.1/video/1',
     'file:///tmp/video.mp4',
@@ -56,6 +60,7 @@ describe('transcript helpers', () => {
   it('updates an existing job without duplicating it', () => {
     const job: JobSnapshot = {
       id: 'job-1',
+      revision: 1,
       sourceKind: 'local',
       source: '/tmp/video.mp4',
       displayName: 'video.mp4',
@@ -69,8 +74,14 @@ describe('transcript helpers', () => {
       outputs: null,
       error: null,
     }
-    const updated = { ...job, stage: 'transcribing' as const, overallProgress: 50 }
+    const updated = {
+      ...job,
+      revision: 2,
+      stage: 'transcribing' as const,
+      overallProgress: 50,
+    }
 
     expect(upsertJob([job], updated)).toEqual([updated])
+    expect(upsertJob([updated], job)).toEqual([updated])
   })
 })

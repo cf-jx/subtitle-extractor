@@ -7,16 +7,44 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release source and versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            git fetch origin main
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+            node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
+          else
+            node scripts/version.mjs --check
+          fi
+          cargo metadata \
+            --manifest-path src-tauri/Cargo.toml \
+            --locked \
+            --format-version 1 > /dev/null
+
   macos-arm64:
+    needs: preflight
     runs-on: macos-15
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
@@ -27,7 +55,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.88.0
+        uses: dtolnay/rust-toolchain@39b0b3842c7e8bbf6904c0bfc3d9006fdd4dc4e0 # 1.88.0
         with:
           targets: aarch64-apple-darwin
           components: clippy,rustfmt
@@ -49,28 +77,27 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 
       - name: Build repaired Mac app and DMG
-        env:
-          CREATE_UPDATER_ARTIFACTS: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm package:macos aarch64-apple-darwin
 
-      - uses: actions/upload-artifact@v4
+      - name: Create Mac updater archive
+        run: bash scripts/create-macos-updater-archive.sh aarch64-apple-darwin
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-arm64-installers
           path: |
             src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
 
   windows-x64:
+    needs: preflight
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
@@ -83,7 +110,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.88.0
+        uses: dtolnay/rust-toolchain@39b0b3842c7e8bbf6904c0bfc3d9006fdd4dc4e0 # 1.88.0
         with:
           targets: x86_64-pc-windows-msvc
           components: clippy,rustfmt
@@ -99,7 +126,7 @@ jobs:
           }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "LIBCLANG_PATH=$LibclangDirectory" -Encoding utf8
 
-      - uses: msys2/setup-msys2@v2
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
         with:
           msystem: UCRT64
           update: true
@@ -140,26 +167,17 @@ jobs:
 
       - name: Build Windows installers
         shell: pwsh
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          if ("${{ startsWith(github.ref, 'refs/tags/v') }}" -eq "true") {
-            pnpm tauri build --target x86_64-pc-windows-msvc --bundles 'nsis,msi' --config src-tauri/tauri.release.conf.json
-          } else {
-            pnpm tauri build --target x86_64-pc-windows-msvc --bundles 'nsis,msi'
-          }
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles 'nsis,msi'
 
       - name: Verify Windows installers
         shell: pwsh
         run: pnpm runtime:verify:windows:installers
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-x64-installers
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
           if-no-files-found: error
@@ -169,19 +187,50 @@ jobs:
     needs:
       - macos-arm64
       - windows-x64
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install signing tool
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Validate release version
         shell: bash
         run: node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
 
       - name: Download verified installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: "*-installers"
           path: downloaded-assets
+
+      - name: Sign updater artifacts
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t mac_update_files < <(find downloaded-assets -type f -name '*.app.tar.gz')
+          mapfile -t windows_update_files < <(find downloaded-assets -type f -name '*.exe')
+          test "${#mac_update_files[@]}" -eq 1
+          test "${#windows_update_files[@]}" -eq 1
+
+          pnpm exec tauri signer sign "${mac_update_files[0]}"
+          pnpm exec tauri signer sign "${windows_update_files[0]}"
+
+          test -s "${mac_update_files[0]}.sig"
+          test -s "${windows_update_files[0]}.sig"
 
       - name: Prepare release assets
         shell: bash
@@ -227,7 +276,8 @@ jobs:
             "$mac_update" \
             "release-assets/$mac_update.sig" \
             "$windows_exe" \
-            "release-assets/$windows_exe.sig"
+            "release-assets/$windows_exe.sig" \
+            "RELEASE_NOTES.md"
 
           (
             cd release-assets
@@ -249,5 +299,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "文案提取 $GITHUB_REF_NAME" \
-            --notes "支持 macOS Apple Silicon 和 Windows x64。本版本已内置自动更新，安装后可在新版本发布时直接升级。" \
+            --notes-file RELEASE_NOTES.md \
             release-assets/*

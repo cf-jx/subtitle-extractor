@@ -69,6 +69,7 @@ impl AppState {
             return Some(snapshot.clone());
         }
         update(snapshot);
+        snapshot.revision = snapshot.revision.saturating_add(1);
         Some(snapshot.clone())
     }
 
@@ -79,6 +80,7 @@ impl AppState {
         let mut jobs = self.inner.jobs.lock();
         let snapshot = jobs.get_mut(job_id)?;
         update(snapshot);
+        snapshot.revision = snapshot.revision.saturating_add(1);
         Some(snapshot.clone())
     }
 
@@ -232,6 +234,7 @@ mod tests {
     fn queued_job() -> JobSnapshot {
         JobSnapshot {
             id: "job-1".into(),
+            revision: 0,
             source_kind: SourceKind::Local,
             source: "/tmp/video.mp4".into(),
             display_name: "video.mp4".into(),
@@ -259,5 +262,6 @@ mod tests {
             .update_job("job-1", |job| job.stage = JobStage::Completed)
             .unwrap();
         assert_eq!(snapshot.stage, JobStage::Cancelled);
+        assert_eq!(snapshot.revision, 1);
     }
 }

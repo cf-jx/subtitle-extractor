@@ -29,6 +29,7 @@ export interface JobOutputs {
 
 export interface JobSnapshot {
   id: string
+  revision: number
   sourceKind: SourceKind
   source: string
   displayName: string
@@ -82,7 +83,7 @@ export interface DesktopBackend {
   listJobs(): Promise<JobSnapshot[]>
   startJob(request: StartJobRequest): Promise<void>
   cancelJob(jobId: string): Promise<void>
-  exportTranscript(request: ExportTranscriptRequest): Promise<void>
+  exportTranscript(request: ExportTranscriptRequest): Promise<JobSnapshot>
   openOutputDirectory(jobId: string): Promise<void>
   pickMedia(): Promise<string | null>
   pickOutputDirectory(): Promise<string | null>

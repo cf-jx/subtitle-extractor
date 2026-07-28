@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Info, X } from 'lucide-react'
+import { CheckCircle2, Download, Info, RefreshCw, X } from 'lucide-react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import type {
   AppInfo,
@@ -79,7 +79,14 @@ function App({
   const [exportFormat, setExportFormat] = useState<ExportFormat>('txt')
   const [includeTimestamps, setIncludeTimestamps] = useState(true)
   const [jobs, setJobs] = useState<JobSnapshot[]>([])
+  const [jobsLoaded, setJobsLoaded] = useState(
+    !backend.availability.available,
+  )
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
+  const [appInfoStatus, setAppInfoStatus] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading')
+  const [appInfoError, setAppInfoError] = useState<string | null>(null)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [segmentEdits, setSegmentEdits] = useState<
     Record<string, SubtitleSegment[]>
@@ -115,13 +122,70 @@ function App({
       job.source === source &&
       !terminalStages.has(job.stage),
   )
-  const canStart =
-    backend.availability.available &&
-    modelReady &&
-    source !== '' &&
-    outputDir !== '' &&
-    (sourceKind === 'local' || urlError === null) &&
-    !sourceIsProcessing
+  const startBlockReason = useMemo(() => {
+    if (!backend.availability.available) {
+      return backend.availability.reason || '桌面功能当前不可用'
+    }
+    if (appInfoStatus === 'loading') {
+      return '正在准备字幕识别'
+    }
+    if (appInfoStatus === 'error') {
+      return '字幕组件初始化失败，请重试'
+    }
+    if (!modelReady) {
+      return '缺少本地字幕模型，请重新安装完整版本'
+    }
+    if (source === '') {
+      return sourceKind === 'local'
+        ? '请选择视频或音频文件'
+        : '请输入抖音或 TikTok 视频链接'
+    }
+    if (sourceKind === 'url' && urlError) {
+      return urlError
+    }
+    if (outputDir === '') {
+      return '请选择字幕输出位置'
+    }
+    if (sourceIsProcessing) {
+      return '该视频正在处理中'
+    }
+    return null
+  }, [
+    appInfoStatus,
+    backend.availability.available,
+    backend.availability.reason,
+    modelReady,
+    outputDir,
+    source,
+    sourceIsProcessing,
+    sourceKind,
+    urlError,
+  ])
+  const canStart = startBlockReason === null
+  const startHintText =
+    startBlockReason === null
+      ? null
+      : !backend.availability.available ||
+          appInfoStatus === 'error' ||
+          !modelReady
+        ? '请按上方提示恢复后再开始'
+        : sourceKind === 'url' && urlError
+          ? '请先修正视频链接'
+          : startBlockReason
+  const hasActiveJobs = jobs.some((job) => !terminalStages.has(job.stage))
+  const hasUnsavedEdits = Object.keys(segmentEdits).length > 0
+  const updateBlockedReason = !jobsLoaded
+    ? '正在读取任务状态'
+    : isStarting
+      ? '正在创建字幕任务'
+      : hasActiveJobs
+        ? '当前任务完成后即可更新'
+        : isExporting
+          ? '字幕导出完成后即可更新'
+          : hasUnsavedEdits
+            ? '请先导出已修改的字幕，再更新'
+            : null
+  const showUpdateDialog = availableUpdate !== null && updateBlockedReason === null
 
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? null,
@@ -139,6 +203,20 @@ function App({
     setSuccessMessage(null)
     setOperationError(messageFromError(error))
   }, [])
+
+  const loadAppInfo = useCallback(async () => {
+    setAppInfoStatus('loading')
+    setAppInfoError(null)
+    try {
+      const info = await backend.getAppInfo()
+      setAppInfo(info)
+      setAppInfoStatus('ready')
+    } catch (error) {
+      setAppInfo(null)
+      setAppInfoError(messageFromError(error))
+      setAppInfoStatus('error')
+    }
+  }, [backend])
 
   const refreshJobs = useCallback(async () => {
     const snapshots = await backend.listJobs()
@@ -159,7 +237,7 @@ function App({
     let disposed = false
     const activeUnlisteners: Unlisten[] = []
 
-    const initialize = async () => {
+    const initializeSubscriptions = async () => {
       try {
         const unlistenJobs = await backend.subscribeJobUpdates((snapshot) => {
           if (disposed) {
@@ -176,41 +254,49 @@ function App({
         }
         activeUnlisteners.push(unlistenJobs)
 
-        try {
-          const unlistenDrops = await backend.subscribeFileDrops((event) => {
-            if (disposed) {
-              return
-            }
-            setIsDragging(event.type === 'enter' || event.type === 'over')
-            if (event.type === 'drop' && event.paths[0]) {
-              setSourceKind('local')
-              setLocalPath(event.paths[0])
-              setOperationError(null)
-            }
-          })
-          if (disposed) {
-            unlistenDrops()
-          } else {
-            activeUnlisteners.push(unlistenDrops)
-          }
-        } catch {
-          if (!disposed) {
-            setOperationError('文件拖放不可用，请点击选择视频或音频')
-          }
-        }
-
-        const [info] = await Promise.all([backend.getAppInfo(), refreshJobs()])
-        if (!disposed) {
-          setAppInfo(info)
-        }
       } catch (error) {
         if (!disposed) {
           showError(error)
         }
       }
+
+      try {
+        const unlistenDrops = await backend.subscribeFileDrops((event) => {
+          if (disposed) {
+            return
+          }
+          setIsDragging(event.type === 'enter' || event.type === 'over')
+          if (event.type === 'drop' && event.paths[0]) {
+            setSourceKind('local')
+            setLocalPath(event.paths[0])
+            setOperationError(null)
+          }
+        })
+        if (disposed) {
+          unlistenDrops()
+        } else {
+          activeUnlisteners.push(unlistenDrops)
+        }
+      } catch {
+        if (!disposed) {
+          setOperationError('文件拖放不可用，请点击选择视频或音频')
+        }
+      }
     }
 
-    void initialize()
+    void initializeSubscriptions()
+    void loadAppInfo()
+    void refreshJobs()
+      .catch((error) => {
+        if (!disposed) {
+          showError(error)
+        }
+      })
+      .finally(() => {
+        if (!disposed) {
+          setJobsLoaded(true)
+        }
+      })
 
     return () => {
       disposed = true
@@ -218,7 +304,7 @@ function App({
         unlisten()
       }
     }
-  }, [backend, refreshJobs, showError])
+  }, [backend, loadAppInfo, refreshJobs, showError])
 
   useEffect(() => {
     if (!backend.availability.available || !updateService.available) {
@@ -274,14 +360,8 @@ function App({
   }, [backend, showError])
 
   const handleStart = useCallback(async () => {
-    if (!canStart) {
-      if (sourceKind === 'url') {
-        setOperationError(validateVideoUrl(url))
-      } else if (!localPath) {
-        setOperationError('请选择一个视频或音频文件')
-      } else if (!outputDir) {
-        setOperationError('请选择字幕输出位置')
-      }
+    if (startBlockReason) {
+      setOperationError(startBlockReason)
       return
     }
 
@@ -304,16 +384,14 @@ function App({
     }
   }, [
     backend,
-    canStart,
     exportFormat,
     includeTimestamps,
-    localPath,
     outputDir,
     refreshJobs,
     showError,
     source,
     sourceKind,
-    url,
+    startBlockReason,
   ])
 
   const handleCancel = useCallback(
@@ -377,15 +455,25 @@ function App({
 
     setIsExporting(true)
     setOperationError(null)
+    const segmentsForExport = selectedSegments
     try {
-      await backend.exportTranscript({
+      const snapshot = await backend.exportTranscript({
         jobId: selectedJob.id,
-        segments: selectedSegments,
+        segments: segmentsForExport,
         exportFormat,
         includeTimestamps,
       })
+      setJobs((current) => upsertJob(current, snapshot))
+      setSelectedJobId(snapshot.id)
+      setSegmentEdits((current) => {
+        if (current[selectedJob.id] !== segmentsForExport) {
+          return current
+        }
+        const next = { ...current }
+        delete next[selectedJob.id]
+        return next
+      })
       setSuccessMessage(`${exportFormat.toUpperCase()} 已导出`)
-      await refreshJobs()
     } catch (error) {
       showError(error)
     } finally {
@@ -395,7 +483,6 @@ function App({
     backend,
     exportFormat,
     includeTimestamps,
-    refreshJobs,
     selectedJob,
     selectedSegments,
     showError,
@@ -422,6 +509,10 @@ function App({
     if (!availableUpdate) {
       return
     }
+    if (updateBlockedReason) {
+      setOperationError(updateBlockedReason)
+      return
+    }
 
     setUpdateStatus('downloading')
     setUpdateProgress(initialUpdateProgress)
@@ -433,11 +524,19 @@ function App({
       setUpdateStatus('failed')
       setUpdateError(`更新失败：${messageFromError(error)}`)
     }
-  }, [availableUpdate, updateService])
+  }, [availableUpdate, updateBlockedReason, updateService])
+
+  const handleDismissUpdate = useCallback(() => {
+    setAvailableUpdate(null)
+  }, [])
 
   return (
     <div className="app-shell">
-      <div className="app-main">
+      <div
+        className="app-main"
+        aria-hidden={showUpdateDialog ? true : undefined}
+        inert={showUpdateDialog ? true : undefined}
+      >
         <header className="app-toolbar">
           <div className="app-brand">
             <img src={yierBubuBrand} alt="" />
@@ -454,10 +553,35 @@ function App({
               <Info aria-hidden="true" />
               <span>{backend.availability.reason}</span>
             </div>
+          ) : appInfoStatus === 'error' ? (
+            <div className="runtime-notice model-warning" role="alert">
+              <Info aria-hidden="true" />
+              <span>
+                字幕组件初始化失败
+                {appInfoError ? `：${appInfoError}` : ''}
+              </span>
+              <button
+                type="button"
+                className="notice-action"
+                onClick={() => void loadAppInfo()}
+              >
+                <RefreshCw aria-hidden="true" />
+                重试
+              </button>
+            </div>
           ) : appInfo?.modelReady === false ? (
             <div className="runtime-notice model-warning" role="alert">
               <Info aria-hidden="true" />
-              <span>缺少本地字幕模型</span>
+              <span>缺少本地字幕模型，请重新安装完整版本</span>
+            </div>
+          ) : null}
+
+          {availableUpdate && updateBlockedReason ? (
+            <div className="runtime-notice update-pending-notice" role="status">
+              <Download aria-hidden="true" />
+              <span>
+                新版本 {availableUpdate.version} 已就绪，{updateBlockedReason}
+              </span>
             </div>
           ) : null}
 
@@ -500,6 +624,7 @@ function App({
               isDragging={isDragging}
               runtimeAvailable={backend.availability.available}
               canStart={canStart}
+              startBlockReason={startHintText}
               onSourceKindChange={setSourceKind}
               onUrlChange={setUrl}
               onPickMedia={() => void handlePickMedia()}
@@ -535,14 +660,14 @@ function App({
         </main>
       </div>
 
-      {availableUpdate ? (
+      {showUpdateDialog && availableUpdate ? (
         <UpdateDialog
           update={availableUpdate}
           status={updateStatus}
           progress={updateProgress}
           error={updateError}
           onInstall={() => void handleInstallUpdate()}
-          onDismiss={() => setAvailableUpdate(null)}
+          onDismiss={handleDismissUpdate}
         />
       ) : null}
     </div>

@@ -151,14 +151,26 @@ pub fn normalize_segments(
         if previous_start_ms.is_some_and(|start_ms| segment.start_ms < start_ms) {
             return Err("字幕时间轴必须递增".into());
         }
-        if segment.text.trim().is_empty() {
+        let text = normalize_cue_text(&segment.text);
+        if text.is_empty() {
             return Err("字幕内容不能为空".into());
         }
         previous_start_ms = Some(segment.start_ms);
         segment.index = index + 1;
-        segment.text = segment.text.trim().to_string();
+        segment.text = text;
     }
     Ok(segments)
+}
+
+fn normalize_cue_text(value: &str) -> String {
+    value
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn render_txt(segments: &[TranscriptSegment], include_timestamps: bool) -> String {
@@ -261,6 +273,25 @@ pub fn ensure_export_available(
     Ok(())
 }
 
+pub fn next_available_export_stem(
+    output_dir: &Path,
+    base_stem: &str,
+    export_format: ExportFormat,
+) -> Result<String, String> {
+    for index in 1..=9_999 {
+        let candidate = if index == 1 {
+            base_stem.to_string()
+        } else {
+            format!("{base_stem}-{index}")
+        };
+        if !export_path(output_dir, &candidate, export_format).exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err("同一任务的编辑版导出文件过多，请整理输出文件夹后重试".into())
+}
+
 pub fn remove_exports(outputs: &OutputFiles) {
     for path in [&outputs.txt, &outputs.srt, &outputs.vtt]
         .into_iter()
@@ -359,6 +390,24 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_blank_lines_inside_cues() {
+        let segments = normalize_segments(vec![TranscriptSegment {
+            index: 7,
+            start_ms: 0,
+            end_ms: 1_000,
+            text: "第一行\r\n\r\n  第二行  \n".into(),
+        }])
+        .unwrap();
+
+        assert_eq!(segments[0].index, 1);
+        assert_eq!(segments[0].text, "第一行\n第二行");
+        assert_eq!(
+            render_srt(&segments),
+            "1\n00:00:00,000 --> 00:00:01,000\n第一行\n第二行\n\n"
+        );
+    }
+
+    #[test]
     fn writes_utf8_exports_without_overwriting_existing_files() {
         let output = tempdir().unwrap();
         let files = write_export(
@@ -388,6 +437,22 @@ mod tests {
 
         remove_exports(&files);
         assert!(!Path::new(files.srt.as_ref().unwrap()).exists());
+    }
+
+    #[test]
+    fn allocates_numbered_stems_for_repeated_edited_exports() {
+        let output = tempdir().unwrap();
+        fs::write(output.path().join("访谈-编辑.srt"), "existing").unwrap();
+        fs::write(output.path().join("访谈-编辑-2.srt"), "existing").unwrap();
+
+        assert_eq!(
+            next_available_export_stem(output.path(), "访谈-编辑", ExportFormat::Srt).unwrap(),
+            "访谈-编辑-3"
+        );
+        assert_eq!(
+            next_available_export_stem(output.path(), "访谈-编辑", ExportFormat::Txt).unwrap(),
+            "访谈-编辑"
+        );
     }
 
     #[test]

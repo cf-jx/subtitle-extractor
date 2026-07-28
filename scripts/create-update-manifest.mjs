@@ -10,6 +10,7 @@ const [
   macSignaturePath,
   windowsAsset,
   windowsSignaturePath,
+  notesPath,
 ] = process.argv.slice(2)
 
 if (
@@ -20,22 +21,24 @@ if (
   !macAsset ||
   !macSignaturePath ||
   !windowsAsset ||
-  !windowsSignaturePath
+  !windowsSignaturePath ||
+  !notesPath
 ) {
   throw new Error(
-    'Usage: node scripts/create-update-manifest.mjs <output> <version> <repository> <tag> <mac-asset> <mac-signature> <windows-asset> <windows-signature>',
+    'Usage: node scripts/create-update-manifest.mjs <output> <version> <repository> <tag> <mac-asset> <mac-signature> <windows-asset> <windows-signature> <notes>',
   )
 }
 
-const [macSignature, windowsSignature] = await Promise.all([
+const [macSignature, windowsSignature, notes] = await Promise.all([
   readFile(macSignaturePath, 'utf8'),
   readFile(windowsSignaturePath, 'utf8'),
+  readFile(notesPath, 'utf8'),
 ])
 const releaseBaseUrl = `https://github.com/${repository}/releases/download/${tag}`
 
 const manifest = {
   version,
-  notes: `文案提取 ${tag} 已发布，包含功能改进和问题修复。`,
+  notes: notes.trim(),
   pub_date: new Date().toISOString(),
   platforms: {
     'darwin-aarch64': {

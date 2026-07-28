@@ -1,5 +1,6 @@
 import type {
   DesktopBackend,
+  ExportTranscriptRequest,
   JobSnapshot,
   StartJobRequest,
 } from './types'
@@ -7,6 +8,7 @@ import type { UpdateService } from '../update/types'
 
 const previewJob: JobSnapshot = {
   id: 'preview-job',
+  revision: 4,
   sourceKind: 'local',
   source: '/Users/scf/Videos/休息与学习.mp4',
   displayName: '休息与学习.mp4',
@@ -39,6 +41,22 @@ const previewJob: JobSnapshot = {
   error: null,
 }
 
+const previewSecondJob: JobSnapshot = {
+  ...previewJob,
+  id: 'preview-job-2',
+  revision: 2,
+  source: '/Users/scf/Videos/采访片段.mp4',
+  displayName: '采访片段.mp4',
+  message: '字幕提取完成',
+  createdAt: '2026-07-25T12:46:00+08:00',
+  segments: [],
+  outputs: {
+    txt: null,
+    srt: '/Users/scf/Desktop/文案提取/采访片段.srt',
+    vtt: null,
+  },
+}
+
 export const previewDraft = {
   sourceKind: 'local' as const,
   localPath: previewJob.source,
@@ -56,11 +74,18 @@ export const previewBackend: DesktopBackend = {
     }
   },
   async listJobs() {
-    return [previewJob]
+    return [previewJob, previewSecondJob]
   },
   async startJob(_request: StartJobRequest) {},
   async cancelJob() {},
-  async exportTranscript() {},
+  async exportTranscript(request: ExportTranscriptRequest) {
+    return {
+      ...previewJob,
+      revision: previewJob.revision + 1,
+      segments: request.segments,
+      message: '字幕已导出',
+    }
+  },
   async openOutputDirectory() {},
   async pickMedia() {
     return previewJob.source

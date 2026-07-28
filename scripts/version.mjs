@@ -9,32 +9,67 @@ const projectRoot = path.resolve(
 )
 const semverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 
+function cargoLockPackageVersion(source) {
+  const marker = '[[package]]\nname = "subtitle-extractor"\n'
+  const start = source.indexOf(marker)
+  if (start === -1) {
+    return null
+  }
+  const end = source.indexOf('\n[[package]]', start + marker.length)
+  const block = source.slice(start, end === -1 ? undefined : end)
+  return block.match(/^version = "([^"]+)"/m)?.[1] ?? null
+}
+
+function updateCargoLockPackageVersion(source, version) {
+  const marker = '[[package]]\nname = "subtitle-extractor"\n'
+  const start = source.indexOf(marker)
+  if (start === -1) {
+    throw new Error('Cargo.lock workspace package was not found')
+  }
+  const end = source.indexOf('\n[[package]]', start + marker.length)
+  const blockEnd = end === -1 ? source.length : end
+  const block = source.slice(start, blockEnd)
+  const updatedBlock = block.replace(
+    /^version = "[^"]+"/m,
+    `version = "${version}"`,
+  )
+  if (updatedBlock === block) {
+    throw new Error('Cargo.lock workspace package version was not found')
+  }
+  return source.slice(0, start) + updatedBlock + source.slice(blockEnd)
+}
+
 async function readVersions() {
   const packagePath = path.join(projectRoot, 'package.json')
   const tauriPath = path.join(projectRoot, 'src-tauri', 'tauri.conf.json')
   const cargoPath = path.join(projectRoot, 'src-tauri', 'Cargo.toml')
-  const [packageSource, tauriSource, cargoSource] = await Promise.all([
-    readFile(packagePath, 'utf8'),
-    readFile(tauriPath, 'utf8'),
-    readFile(cargoPath, 'utf8'),
-  ])
+  const cargoLockPath = path.join(projectRoot, 'src-tauri', 'Cargo.lock')
+  const [packageSource, tauriSource, cargoSource, cargoLockSource] =
+    await Promise.all([
+      readFile(packagePath, 'utf8'),
+      readFile(tauriPath, 'utf8'),
+      readFile(cargoPath, 'utf8'),
+      readFile(cargoLockPath, 'utf8'),
+    ])
   const packageJson = JSON.parse(packageSource)
   const tauriJson = JSON.parse(tauriSource)
   const cargoVersion = cargoSource.match(
     /^\[package\][\s\S]*?^version = "([^"]+)"/m,
   )?.[1]
+  const cargoLockVersion = cargoLockPackageVersion(cargoLockSource)
 
-  if (!cargoVersion) {
-    throw new Error('Cargo package version was not found')
+  if (!cargoVersion || !cargoLockVersion) {
+    throw new Error('Cargo package version was not found in manifest and lockfile')
   }
 
   return {
-    paths: { packagePath, tauriPath, cargoPath },
-    sources: { packageJson, tauriJson, cargoSource },
+    paths: { packagePath, tauriPath, cargoPath, cargoLockPath },
+    sources: { packageJson, tauriJson, cargoSource, cargoLockSource },
     versions: {
       package: packageJson.version,
       tauri: tauriJson.version,
       cargo: cargoVersion,
+      cargoLock: cargoLockVersion,
     },
   }
 }
@@ -51,7 +86,7 @@ async function checkVersions(expectedVersion) {
 
   if (uniqueVersions.size !== 1) {
     throw new Error(
-      `Version mismatch: package=${versions.package}, tauri=${versions.tauri}, cargo=${versions.cargo}`,
+      `Version mismatch: package=${versions.package}, tauri=${versions.tauri}, cargo=${versions.cargo}, cargoLock=${versions.cargoLock}`,
     )
   }
 
@@ -75,6 +110,10 @@ async function setVersion(version) {
     /^(\[package\][\s\S]*?^version = ")[^"]+(")/m,
     `$1${version}$2`,
   )
+  const cargoLockSource = updateCargoLockPackageVersion(
+    sources.cargoLockSource,
+    version,
+  )
 
   await Promise.all([
     writeFile(
@@ -88,6 +127,7 @@ async function setVersion(version) {
       'utf8',
     ),
     writeFile(paths.cargoPath, cargoSource, 'utf8'),
+    writeFile(paths.cargoLockPath, cargoLockSource, 'utf8'),
   ])
 
   process.stdout.write(`Version updated to ${version}\n`)

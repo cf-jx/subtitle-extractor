@@ -10,9 +10,18 @@ export const terminalStages = new Set<JobStage>([
   'cancelled',
 ])
 
-function isHost(hostname: string, domain: string): boolean {
-  return hostname === domain || hostname.endsWith(`.${domain}`)
-}
+const supportedVideoHosts = new Set([
+  'douyin.com',
+  'www.douyin.com',
+  'm.douyin.com',
+  'v.douyin.com',
+  'iesdouyin.com',
+  'www.iesdouyin.com',
+  'tiktok.com',
+  'www.tiktok.com',
+  'vm.tiktok.com',
+  'vt.tiktok.com',
+])
 
 function isSingleVideoPath(hostname: string, pathname: string): boolean {
   const path = pathname.replace(/\/+$/, '') || '/'
@@ -20,16 +29,20 @@ function isSingleVideoPath(hostname: string, pathname: string): boolean {
   if (hostname === 'v.douyin.com') {
     return /^\/[A-Za-z0-9_-]+$/.test(path)
   }
-  if (isHost(hostname, 'iesdouyin.com')) {
+  if (hostname === 'iesdouyin.com' || hostname === 'www.iesdouyin.com') {
     return /^\/share\/video\/\d+$/.test(path)
   }
-  if (isHost(hostname, 'douyin.com')) {
+  if (
+    hostname === 'douyin.com' ||
+    hostname === 'www.douyin.com' ||
+    hostname === 'm.douyin.com'
+  ) {
     return /^\/(?:video|share\/video)\/\d+$/.test(path)
   }
   if (hostname === 'vm.tiktok.com' || hostname === 'vt.tiktok.com') {
     return /^\/[A-Za-z0-9_-]+$/.test(path)
   }
-  if (isHost(hostname, 'tiktok.com')) {
+  if (hostname === 'tiktok.com' || hostname === 'www.tiktok.com') {
     return (
       /^\/@[^/]+\/video\/\d+$/.test(path) ||
       /^\/t\/[A-Za-z0-9_-]+$/.test(path)
@@ -62,12 +75,8 @@ export function validateVideoUrl(value: string): string | null {
     return '链接端口不受支持'
   }
 
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, '')
-  const supportedHost =
-    isHost(hostname, 'douyin.com') ||
-    isHost(hostname, 'iesdouyin.com') ||
-    isHost(hostname, 'tiktok.com')
-  if (!supportedHost) {
+  const hostname = url.hostname.toLowerCase()
+  if (hostname.endsWith('.') || !supportedVideoHosts.has(hostname)) {
     return '仅支持抖音或 TikTok 视频链接'
   }
 
@@ -109,6 +118,9 @@ export function upsertJob(
   const existingIndex = jobs.findIndex((job) => job.id === incoming.id)
   if (existingIndex === -1) {
     return [incoming, ...jobs]
+  }
+  if (incoming.revision <= jobs[existingIndex].revision) {
+    return jobs
   }
 
   const next = jobs.slice()

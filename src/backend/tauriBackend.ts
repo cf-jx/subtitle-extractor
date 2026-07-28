@@ -63,9 +63,11 @@ export const tauriBackend: DesktopBackend = {
     await invoke('cancel_job', { jobId })
   },
 
-  async exportTranscript(request: ExportTranscriptRequest): Promise<void> {
+  async exportTranscript(
+    request: ExportTranscriptRequest,
+  ): Promise<JobSnapshot> {
     requireDesktopRuntime()
-    await invoke('export_transcript', { request })
+    return invoke<JobSnapshot>('export_transcript', { request })
   },
 
   async openOutputDirectory(jobId: string): Promise<void> {

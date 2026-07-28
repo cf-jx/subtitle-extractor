@@ -184,6 +184,9 @@ export function TaskQueue({
                       <button
                         type="button"
                         className="task-name"
+                        aria-current={
+                          selectedJobId === job.id ? 'true' : undefined
+                        }
                         onClick={() => onSelect(job.id)}
                       >
                         <span className={`file-status-icon ${tone}`}>
@@ -201,7 +204,16 @@ export function TaskQueue({
                         <span>
                           {progress === null ? '处理中' : `${Math.round(progress)}%`}
                         </span>
-                        <span className="progress-track">
+                        <span
+                          className="progress-track"
+                          role="progressbar"
+                          aria-label={`${job.displayName} 处理进度`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={
+                            progress === null ? undefined : Math.round(progress)
+                          }
+                        >
                           {progress === null ? (
                             <span className="progress-indeterminate" />
                           ) : (
@@ -217,6 +229,7 @@ export function TaskQueue({
                       <span
                         className={`job-status ${tone}`}
                         title={job.error || job.message}
+                        aria-live={active ? 'polite' : undefined}
                       >
                         <StatusIcon stage={job.stage} />
                         {stageLabels[job.stage]}

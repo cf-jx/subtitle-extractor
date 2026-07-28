@@ -114,6 +114,7 @@ pub async fn start_job(
         subtitles::reserve_export(&lock_root, &output_dir, &output_stem, request.export_format)?;
     let snapshot = JobSnapshot {
         id: job_id.clone(),
+        revision: 0,
         source_kind: request.source_kind,
         source,
         display_name,
@@ -182,7 +183,7 @@ pub async fn export_transcript(
         return Err("任务完成后才能导出字幕".into());
     }
     let output_dir = validate_output_dir(&existing.output_dir)?;
-    let stem = format!(
+    let base_stem = format!(
         "{}-编辑",
         sanitize_stem(
             Path::new(&existing.display_name)
@@ -191,8 +192,10 @@ pub async fn export_transcript(
                 .unwrap_or(&existing.display_name)
         )
     );
-    subtitles::ensure_export_available(&output_dir, &stem, request.export_format)?;
-    let segments = request.segments;
+    let stem =
+        subtitles::next_available_export_stem(&output_dir, &base_stem, request.export_format)?;
+    let edited_segments = subtitles::normalize_segments(request.segments)?;
+    let segments_for_export = edited_segments.clone();
     let export_format = request.export_format;
     let include_timestamps = request.include_timestamps;
     let output_dir_for_task = output_dir.clone();
@@ -200,7 +203,7 @@ pub async fn export_transcript(
         subtitles::write_export(
             &output_dir_for_task,
             &stem,
-            segments,
+            segments_for_export,
             export_format,
             include_timestamps,
         )
@@ -210,7 +213,12 @@ pub async fn export_transcript(
 
     let snapshot = state
         .replace_job(&request.job_id, |job| {
-            job.outputs = Some(outputs);
+            if let Some(existing_outputs) = job.outputs.as_mut() {
+                existing_outputs.merge(outputs);
+            } else {
+                job.outputs = Some(outputs);
+            }
+            job.segments = edited_segments;
             job.message = "字幕已导出".into();
         })
         .ok_or_else(|| "找不到任务".to_string())?;

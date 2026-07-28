@@ -22,6 +22,7 @@ interface SourcePanelProps {
   isDragging: boolean
   runtimeAvailable: boolean
   canStart: boolean
+  startBlockReason: string | null
   onSourceKindChange: (sourceKind: SourceKind) => void
   onUrlChange: (value: string) => void
   onPickMedia: () => void
@@ -45,6 +46,7 @@ export function SourcePanel({
   isDragging,
   runtimeAvailable,
   canStart,
+  startBlockReason,
   onSourceKindChange,
   onUrlChange,
   onPickMedia,
@@ -64,11 +66,10 @@ export function SourcePanel({
         <h2 id="source-title">视频来源</h2>
       </header>
 
-      <div className="source-tabs" role="tablist" aria-label="视频来源">
+      <div className="source-tabs" role="group" aria-label="视频来源">
         <button
           type="button"
-          role="tab"
-          aria-selected={sourceKind === 'local'}
+          aria-pressed={sourceKind === 'local'}
           className="source-tab"
           onClick={() => onSourceKindChange('local')}
         >
@@ -76,8 +77,7 @@ export function SourcePanel({
         </button>
         <button
           type="button"
-          role="tab"
-          aria-selected={sourceKind === 'url'}
+          aria-pressed={sourceKind === 'url'}
           className="source-tab"
           onClick={() => onSourceKindChange('url')}
         >
@@ -226,7 +226,10 @@ export function SourcePanel({
       </div>
       <button
         type="button"
-        className="primary-button start-button"
+        className={`primary-button start-button${
+          startBlockReason ? ' has-reason' : ''
+        }`}
+        title={startBlockReason || undefined}
         disabled={!canStart || isStarting}
         onClick={onStart}
       >
@@ -238,7 +241,11 @@ export function SourcePanel({
         ) : (
           <>
             <PawPrint aria-hidden="true" />
-            开始提取
+            <span>
+              {startBlockReason
+                ? `开始提取 · ${startBlockReason}`
+                : '开始提取'}
+            </span>
           </>
         )}
       </button>

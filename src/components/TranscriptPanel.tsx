@@ -40,7 +40,8 @@ export function TranscriptPanel({
   onOpenOutput,
 }: TranscriptPanelProps) {
   const hasTranscript = segments.length > 0
-  const canExport = runtimeAvailable && hasTranscript
+  const canExport =
+    runtimeAvailable && hasTranscript && job?.stage === 'completed'
 
   return (
     <section
@@ -114,6 +115,7 @@ export function TranscriptPanel({
                 <textarea
                   value={segment.text}
                   aria-label={`第 ${position + 1} 段文案`}
+                  disabled={isExporting}
                   onChange={(event) =>
                     onSegmentChange(segment.index, event.target.value)
                   }

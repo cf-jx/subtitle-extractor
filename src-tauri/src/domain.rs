@@ -64,10 +64,25 @@ pub struct OutputFiles {
     pub vtt: Option<String>,
 }
 
+impl OutputFiles {
+    pub fn merge(&mut self, other: Self) {
+        if other.txt.is_some() {
+            self.txt = other.txt;
+        }
+        if other.srt.is_some() {
+            self.srt = other.srt;
+        }
+        if other.vtt.is_some() {
+            self.vtt = other.vtt;
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct JobSnapshot {
     pub id: String,
+    pub revision: u64,
     pub source_kind: SourceKind,
     pub source: String,
     pub display_name: String,
@@ -107,4 +122,27 @@ pub struct AppInfo {
     pub platform: &'static str,
     pub model_name: &'static str,
     pub model_ready: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merges_new_exports_without_losing_existing_formats() {
+        let mut files = OutputFiles {
+            txt: Some("/tmp/transcript.txt".into()),
+            srt: None,
+            vtt: None,
+        };
+        files.merge(OutputFiles {
+            txt: None,
+            srt: Some("/tmp/transcript.srt".into()),
+            vtt: None,
+        });
+
+        assert_eq!(files.txt.as_deref(), Some("/tmp/transcript.txt"));
+        assert_eq!(files.srt.as_deref(), Some("/tmp/transcript.srt"));
+        assert!(files.vtt.is_none());
+    }
 }
