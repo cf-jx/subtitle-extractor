@@ -102,7 +102,7 @@ pnpm runtime:verify:windows:installers
 
 ## 发布与自动更新
 
-自动更新从 `0.2.0` 开始支持。已安装 `0.1.0` 的用户需要手动安装一次 `0.2.0`；之后发布更高版本时，旧版启动后会显示更新窗口。
+自动更新从 `0.2.0` 开始支持。已安装 `0.1.0` 的用户需要手动安装一次 `0.2.0` 或更高版本；之后发布更高版本时，旧版启动后会显示更新窗口。
 
 发布前用脚本同步 `package.json`、Tauri 配置、Cargo 清单和 `Cargo.lock` 中的版本号：
 
@@ -122,6 +122,12 @@ git push origin v0.2.1
 标签会触发 GitHub Actions 构建 Mac 和 Windows 安装包、生成签名更新包与 `latest.json`，并自动创建 GitHub Release。普通代码推送不会直接发布更新，只有推送 `v*` 标签才会让已安装软件收到新版本。
 
 更新私钥保存在 GitHub Actions Secrets 的 `TAURI_SIGNING_PRIVATE_KEY` 和 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 中，仅注入全新 Runner 上的发布签名步骤；构建任务不会接触私钥。公钥固定在 `src-tauri/tauri.conf.json`。更换公钥会导致已安装版本无法验证后续更新。
+
+发布任务会在创建 Release 前用上述公钥重新验证 Mac 和 Windows 更新包，任一签名不匹配都会终止发布。本地可用以下命令验证已签名更新包：
+
+```bash
+bash scripts/verify-updater-signature.sh <artifact> <artifact.sig>
+```
 
 ## 固定资源与许可证
 

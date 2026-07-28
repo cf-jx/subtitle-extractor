@@ -203,6 +203,9 @@ jobs:
       - name: Install signing tool
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Install Rust toolchain for signature verification
+        uses: dtolnay/rust-toolchain@39b0b3842c7e8bbf6904c0bfc3d9006fdd4dc4e0 # 1.88.0
+
       - name: Validate release version
         shell: bash
         run: node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
@@ -231,6 +234,23 @@ jobs:
 
           test -s "${mac_update_files[0]}.sig"
           test -s "${windows_update_files[0]}.sig"
+
+      - name: Verify updater signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t mac_update_files < <(find downloaded-assets -type f -name '*.app.tar.gz')
+          mapfile -t windows_update_files < <(find downloaded-assets -type f -name '*.exe')
+          test "${#mac_update_files[@]}" -eq 1
+          test "${#windows_update_files[@]}" -eq 1
+
+          bash scripts/verify-updater-signature.sh \
+            "${mac_update_files[0]}" \
+            "${mac_update_files[0]}.sig"
+          bash scripts/verify-updater-signature.sh \
+            "${windows_update_files[0]}" \
+            "${windows_update_files[0]}.sig"
 
       - name: Prepare release assets
         shell: bash
